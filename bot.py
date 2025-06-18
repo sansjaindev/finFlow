@@ -1,15 +1,16 @@
 # from telegram import Update
 # from telegram.ext import (
 # 	ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes,
-# 	ConversationHandler, filters
+# 	ConversationHandler, filters, JobQueue
 # )
 # from telegram.constants import ParseMode
 # from supabase import create_client
 # import os
 # import re
-# from datetime import datetime, timedelta
+# from datetime import datetime, timedelta, time
 # from apscheduler.schedulers.asyncio import AsyncIOScheduler
 # import random
+# import pytz
 
 # # Environment Variables
 # BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -24,17 +25,17 @@
 
 # async def send_daily_reminder(app):
 # 	# Replace this with your actual chat ID or maintain a list of users
-# 	CHAT_ID = 1039721421  # Replace with int, e.g., 123456789
+# 	chat_id = int(os.getenv("CHAT_ID"))  # Replace with int, e.g., 123456789
 # 	messages_list = ["📅 This is your daily 10 PM reminder to log your expenses!", "test"]
 # 	random_msg = random.choice(messages_list)
+# 	print('sending reminder now')
 # 	try:
 # 		await app.bot.send_message(
-# 			chat_id=CHAT_ID,
-# 			text=random_msg
+# 			chat_id=chat_id,
+# 			text="sending message to you"
 # 		)
 # 	except Exception as e:
 # 		print("Failed to send scheduled message:", e)
-
 
 # # --- /start ---
 # async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -334,8 +335,6 @@
 # 	joined = ",".join(conditions)
 # 	return query.or_(joined)
 
-
-
 # # --- Main ---
 # def main():
 # 	app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -359,17 +358,18 @@
 # 	app.add_handler(conv_handler)
 # 	app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_form_handler))
 
+# 	daily_reminder_time = time(hour=2, minute=13, second=0, tzinfo=pytz.timezone("Asia/Kolkata"))
+# 	# Scheduler setup
+# 	app.job_queue.run_daily(
+# 		send_daily_reminder, # The callback function
+# 		time=daily_reminder_time, # The time of day to run
+# 		days=(0, 1, 2, 3, 4, 5, 6), # Run every day of the week (Monday=0 to Sunday=6)
+# 		name='Daily Expense Reminder', # A name for the job (optional, for logging/debugging)
+# 	)
+# 	print("Daily reminder scheduled for 10 PM IST using JobQueue.")
+
 # 	app.run_polling()
 
-# 	# Scheduler setup
-# 	scheduler = AsyncIOScheduler()
-# 	scheduler.add_job(
-# 		lambda: send_daily_reminder(app),
-# 		trigger="cron",
-# 		hour=22,
-# 		minute=0,
-# 	)
-# 	scheduler.start()
 
 # if __name__ == "__main__":
 # 	main()
@@ -397,7 +397,7 @@ from aiohttp import web
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Example: https://yourapp.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 WEBHOOK_PATH = "/webhook"
 PORT = int(os.getenv("PORT", 8080))
 
@@ -408,9 +408,9 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 CATEGORY, AMOUNT, WALLET, NOTE, DATE = range(5)
 
 async def send_daily_reminder(app):
-	# Replace this with your actual chat ID or maintain a list of users
-	CHAT_ID = 1039721421  # Replace with int, e.g., 123456789
-	messages_list = ["📅 This is your daily 10 PM reminder to log your expenses!", "test"]
+	CHAT_ID = int(os.getenv("CHAT_ID"))
+	messages_list = ["📅 This is your daily 10 PM reminder to log your expenses!", "💡 Time to track today's money moves!",
+		"🔁 Don’t forget to record your expenses before bed!",]
 	random_msg = random.choice(messages_list)
 	try:
 		await app.bot.send_message(
@@ -549,8 +549,7 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	text = update.message.text.strip()
 	text = update.message.text.strip().rstrip(".")
 
-
-	# Check if it's a quick entry format (e.g., "Food 250 UPI Dinner")
+	# Check if it's a quick entry format
 	parsed = parse_expense(text)
 	if parsed:
 		category, amount, wallet, note, date_str = parsed
@@ -559,7 +558,7 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 				datetime.strptime(date_str, "%Y-%m-%d").isoformat()
 				if date_str else datetime.now().isoformat()
 			)
-			# If category is not income/salary, treat it as expense
+			
 			final_amount = -abs(amount) if category.lower() not in ["income", "salary"] else abs(amount)
 
 			supabase.table("Expenses").insert({
@@ -591,17 +590,9 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	try:
 		query = supabase.table("Expenses").select("*").eq("user_id", user_id)
 
-		# 1. Ranged pattern
 		pattern_range = r"show(?: all)?\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?\s*from (\d{4}-\d{2}-\d{2}) (?:to|till) (yesterday|today|\d{4}-\d{2}-\d{2})(?: via ([^0-9]+))?\.?$"
-
-		# 2. All data (with optional category and wallet)
 		pattern_all = r"show all\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: via ([^0-9]+))?\.?$"
-
-		# 3. Single-day pattern
 		pattern_single = r"show(?: all)?\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: for (today|yesterday|\d{4}-\d{2}-\d{2}))?(?: via ([^0-9]+))?\.?$"
-
-
-
 
 		now = datetime.now()
 
@@ -644,8 +635,6 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 				query = apply_multi_ilike(query, "wallet", wallet)
 
 
-
-
 		# --- Single Day (or default to today) ---
 		elif m := re.fullmatch(pattern_single, text):
 			txn_type, category, date_str, wallet = m.groups()
@@ -684,6 +673,7 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			)
 			return
 
+
 		# --- Execute query ---
 		data = query.order("created_at", desc=True).execute().data
 
@@ -706,7 +696,6 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		print("Free-form error:", e)
 		await update.message.reply_text("⚠️ Could not process request.")
 
-
 def apply_multi_ilike(query, field, value_string):
 	values = [v.strip() for v in value_string.split(",") if v.strip()]
 	if not values:
@@ -723,15 +712,15 @@ def apply_multi_ilike(query, field, value_string):
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("inc", income_command), CommandHandler("exp", expense_command)],
-    states={
-        CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
-        AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)],
-        WALLET: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_wallet)],
-        NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
-        DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)]
-    },
-    fallbacks=[CommandHandler("cancel", cancel)]
+	entry_points=[CommandHandler("inc", income_command), CommandHandler("exp", expense_command)],
+	states={
+		CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
+		AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)],
+		WALLET: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_wallet)],
+		NOTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_note)],
+		DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)]
+	},
+	fallbacks=[CommandHandler("cancel", cancel)]
 )
 
 app.add_handler(CommandHandler("start", start))
@@ -740,23 +729,27 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_form_handle
 
 # --- Main ---
 async def handle(request):
-    data = await request.json()
-    update = Update.de_json(data, app.bot)
-    await app.update_queue.put(update)
-    return web.Response(text="OK")
+	data = await request.json()
+	update = Update.de_json(data, app.bot)
+	await app.update_queue.put(update)
+	return web.Response(text="OK")
 
 async def main():
-    await app.bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
-    web_app = web.Application()
-    web_app.router.add_post(WEBHOOK_PATH, handle)
-    await app.initialize()
-    await app.start()
-    runner = web.AppRunner(web_app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", PORT)
-    await site.start()
-    print("Bot is running via webhook...")
-    await asyncio.Event().wait()
+	await app.bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
+	web_app = web.Application()
+	web_app.router.add_post(WEBHOOK_PATH, handle)
+	await app.initialize()
+	await app.start()
+	runner = web.AppRunner(web_app)
+	await runner.setup()
+	site = web.TCPSite(runner, "0.0.0.0", PORT)
+	await site.start()
+	print("Bot is running via webhook...")
+
+	schedular = AsyncIOScheduler(timezone="Asia/Kolkata")
+	schedular.add_job(send_daily_reminder, "cron", hour=22, minute=00, args=[app])
+	schedular.start()
+	await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+	asyncio.run(main())

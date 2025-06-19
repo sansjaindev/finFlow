@@ -682,13 +682,40 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			return
 
 		message = f"📊 *Transactions:*\n\n"
+		total_income = 0
+		total_expense = 0
 		for txn in data:
-			sign = "🟢 Income" if txn["amount"] > 0 else "🔴 Expense"
+			amt = txn["amount"]
+			if amt > 0:
+				sign = "🟢 Income"
+				total_income += amt
+
+			else:
+				sign = "🔴 Expense"
+				total_expense += abs(amt)
+
 			message += (
-				f"{sign} ₹{abs(txn['amount'])}\n"
+				f"{sign} ₹{abs(amt)}\n"
 				f"📂 {txn['category']} | 💳 {txn['wallet']}\n"
 				f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n\n"
 			)
+		
+		net_total = total_income - total_expense
+
+		summary = ["📈 *Summary:*\n"]
+
+		if "transactions" in text or "transaction" in text or ("income" not in text and ("expense" not in text or "expenses" not in text)):
+			summary.append(f"🟢 Total Income   : ₹{total_income:.2f}")
+			summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
+			summary.append(f"🧾 Net: ₹{net_total:.2f}")
+
+		elif "income" in text:
+			summary.append(f"🟢 Total Income : ₹{total_income:.2f}")
+			
+		elif "expenses" in text:
+			summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
+
+		message += "\n" + "\n".join(summary)	
 
 		await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 

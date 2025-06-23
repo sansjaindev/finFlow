@@ -4,11 +4,12 @@ from telegram.ext import ContextTypes
 from config import CATEGORY, UPDATE_ID
 from config import (
 	supabase,
-	UPDATE_DATA
+	UPDATE_DATA,
+	DELETE_ID,
+	DELETE_CONFIRM
 )
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
-
 from parser import parse_expense
 from operation import handle_insert, handle_update, handle_view
 
@@ -37,8 +38,12 @@ async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await update.message.reply_text("Enter ID of the transaction you want to update:")
 	return UPDATE_ID
 
+# --- Delete Entry Start ---
+async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	await update.message.reply_text("Enter ID of the transaction you want to delete:")
+	return DELETE_ID
 
-# --- Handler to bridge free-form "update transaction ID" to conversation ---
+
 async def get_update_free_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	match = re.match(r"update transaction (\d+)$", update.message.text.strip(), re.IGNORECASE)
 	if match:
@@ -80,6 +85,42 @@ async def get_update_free_form(update: Update, context: ContextTypes.DEFAULT_TYP
 			await update.message.reply_text("⚠️ Failed to fetch transaction. Please try again later.")
 			return ConversationHandler.END
 	return ConversationHandler.END
+
+async def get_delete_free_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	match = re.match(r"(?i)^delete transaction (\d+)$", update.message.text.strip())
+	if not match:
+		await update.message.reply_text("❌ Invalid format. Use `/delete` or `Delete transaction <id>`.")
+		return ConversationHandler.END
+
+	txn_id = match.group(1).strip()
+	context.user_data["delete_id"] = txn_id
+	user_id = update.effective_user.id
+
+	try:
+		result = supabase.table("Expenses").select("*").eq("user_id", user_id).eq("id", txn_id).single().execute()
+		data = result.data
+
+		if not data:
+			await update.message.reply_text("❌ Transaction not found.")
+			return ConversationHandler.END
+
+		context.user_data["delete_data"] = data
+
+		await update.message.reply_text(
+			f"You are about to delete the following transaction:\n\n"
+			f"🆔 ID {txn_id}\n"
+			f"{'🟢 Income' if data['amount'] > 0 else '🔴 Expense'} ₹{abs(data['amount'])}\n"
+			f"📂 {data['category']} | 💳 {data['wallet']}\n"
+			f"🗓️ {data['created_at'][:10]} | 📝 {data.get('note', '')}\n\n"
+			f"Are you sure? Reply with 'yes' to confirm or 'no' to cancel.",
+			parse_mode=ParseMode.MARKDOWN
+		)
+		return DELETE_CONFIRM
+	
+	except Exception as e:
+		print("Delete Free Form Fetch Error:", e)
+		await update.message.reply_text("⚠️ Failed to fetch transaction.")
+		return ConversationHandler.END
 
 async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	text = update.message.text.strip().rstrip(".")

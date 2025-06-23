@@ -9,20 +9,22 @@ from aiohttp import web
 from operation import cancel, send_daily_reminder
 from message_handler import (
     get_category, get_amount, get_note, get_date, get_wallet,
-    get_update_id, get_update_data, confirm_update
+    get_update_id, get_update_data, confirm_update,
+	get_delete_id, confirm_delete
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
     CATEGORY, AMOUNT, DATE, NOTE, WALLET,
-    UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM
+    UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
+	DELETE_ID, DELETE_CONFIRM
 )
 from entry_point import (
     start, income_command,
     expense_command, update_command,
-	get_update_free_form, free_form_handler
+	delete_command,
+	get_update_free_form, get_delete_free_form,
+	free_form_handler
 )
-
-
 
 
 # --- TELEGRAM + WEBHOOK SETUP ---
@@ -33,7 +35,9 @@ conv_handler = ConversationHandler(
 		CommandHandler("inc", income_command),
 		CommandHandler("exp", expense_command),
 		CommandHandler("update", update_command),
-		MessageHandler(filters.Regex(r"(?i)update transaction (\d+)$") & ~filters.COMMAND, get_update_free_form)
+		MessageHandler(filters.Regex(r"(?i)update transaction (\d+)$") & ~filters.COMMAND, get_update_free_form),
+		CommandHandler("delete", delete_command),
+		MessageHandler(filters.Regex(r"(?i)^delete transaction \d+$") & ~filters.COMMAND, get_delete_free_form),
 ],
 	states={
 		CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
@@ -44,6 +48,8 @@ conv_handler = ConversationHandler(
 		UPDATE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_update_id)],
 		UPDATE_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_update_data)],
 		UPDATE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_update)],
+		DELETE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_delete_id)],
+		DELETE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_delete)],
 	},
 	fallbacks=[CommandHandler("cancel", cancel)]
 )

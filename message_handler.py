@@ -3,7 +3,7 @@ from telegram.ext import ConversationHandler, ContextTypes
 from telegram.constants import ParseMode
 from config import supabase
 from datetime import datetime, timedelta
-from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, IST
+from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, DELETE_ID, DELETE_CONFIRM, IST
 from parser import parse_expense
 
 
@@ -177,5 +177,62 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	except Exception as e:
 		print("Update error:", e)
 		await update.message.reply_text("⚠️ Failed to update transaction.")
+
+	return ConversationHandler.END
+
+
+# --- Step 1: Delete ID ---
+async def get_delete_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	context.user_data["delete_id"] = update.message.text.strip()
+	user_id = update.effective_user.id
+	txn_id = context.user_data["delete_id"]
+
+	try:
+		result = supabase.table("Expenses").select("*").eq("user_id", user_id).eq("id", txn_id).single().execute()
+		data = result.data
+
+		if not data:
+			await update.message.reply_text("❌ Transaction not found.")
+			return ConversationHandler.END
+
+		context.user_data["delete_data"] = data
+
+		await update.message.reply_text(
+			f"You are about to delete the following transaction:\n\n"
+			f"🆔 ID {txn_id}\n"
+			f"{'🟢 Income' if data['amount'] > 0 else '🔴 Expense'} ₹{abs(data['amount'])}\n"
+			f"📂 {data['category']} | 💳 {data['wallet']}\n"
+			f"🗓️ {data['created_at'][:10]} | 📝 {data.get('note', '')}\n\n"
+			f"Are you sure? Reply with 'yes' to confirm or 'no' to cancel.",
+			parse_mode=ParseMode.MARKDOWN
+		)
+		return DELETE_CONFIRM
+	
+	except Exception as e:
+		print("Delete ID Fetch Error:", e)
+		await update.message.reply_text("⚠️ Failed to fetch transaction.")
+		return ConversationHandler.END
+
+# --- Step 2: Confirm Delete
+async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	reply = update.message.text.strip().lower()
+	if reply not in ["yes", "y", "confirm"]:
+		await update.message.reply_text("❌ Deletion cancelled.")
+		return ConversationHandler.END
+
+	user_id = update.effective_user.id
+	txn_id = context.user_data["delete_id"]
+
+	try:
+		delete_result = supabase.table("Expenses").delete().eq("user_id", user_id).eq("id", txn_id).execute()
+
+		if not delete_result.data:
+			await update.message.reply_text("⚠️ Transaction not found or already deleted.")
+		else:
+			await update.message.reply_text("✅ Transaction successfully deleted.")
+
+	except Exception as e:
+		print("Delete Error:", e)
+		await update.message.reply_text("⚠️ Failed to delete transaction.")
 
 	return ConversationHandler.END

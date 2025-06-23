@@ -17,3 +17,4 @@ IST = pytz.timezone("Asia/Kolkata")
 # States
 CATEGORY, AMOUNT, WALLET, NOTE, DATE = range(5)
 UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM = range(20, 23)
+DELETE_ID, DELETE_CONFIRM = range(30, 32)

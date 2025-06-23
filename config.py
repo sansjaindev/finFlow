@@ -1,5 +1,7 @@
 import os
 from supabase import create_client
+import pytz
+
 # Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -10,6 +12,7 @@ PORT = int(os.getenv("PORT", 8080))
 
 # Supabase Client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+IST = pytz.timezone("Asia/Kolkata")
 
 # States
 CATEGORY, AMOUNT, WALLET, NOTE, DATE = range(5)

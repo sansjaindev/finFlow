@@ -1,6 +1,6 @@
 import re
-import datetime
 from datetime import datetime, timedelta
+from config import IST
 
 def apply_multi_ilike(query, field, value_string):
 	values = [v.strip() for v in value_string.split(",") if v.strip()]
@@ -45,10 +45,10 @@ def parse_expense(text):
 	# Override date if keyword was found
 	if extracted_date_keyword:
 		if extracted_date_keyword == "today":
-			date = datetime.now().strftime("%Y-%m-%d")
+			date = datetime.now(IST).strftime("%Y-%m-%d")
 		elif extracted_date_keyword == "yesterday":
-			date = (datetime.now() - timedelta(1)).strftime("%Y-%m-%d")
+			date = (datetime.now(IST) - timedelta(1)).strftime("%Y-%m-%d")
 		elif extracted_date_keyword == "day before yesterday":
-			date = (datetime.now() - timedelta(2)).strftime("%Y-%m-%d")
+			date = (datetime.now(IST) - timedelta(2)).strftime("%Y-%m-%d")
 
 	return category, amount, wallet, note, date

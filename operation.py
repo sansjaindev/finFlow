@@ -7,6 +7,7 @@ from telegram.constants import ParseMode
 from telegram import Update
 import os
 import random
+from config import IST
 
 
 async def send_daily_reminder(app):
@@ -29,7 +30,7 @@ async def handle_insert(update, context, user_id, parsed):
 	try:
 		created_at = (
 			datetime.strptime(date_str, "%Y-%m-%d").isoformat() if date_str
-			else datetime.now().isoformat()
+			else datetime.now(IST).isoformat()
 		)
 
 		final_amount = -abs(amount) if category.lower() not in ["income", "salary"] else abs(amount)
@@ -66,7 +67,7 @@ async def handle_update(update, context, user_id, text):
 			category, amount, wallet, note, date_str = parsed
 			created_at = (
 				datetime.strptime(date_str, "%Y-%m-%d").isoformat() if date_str
-				else datetime.now().isoformat()
+				else datetime.now(IST).isoformat()
 			)
 			final_amount = -abs(amount) if category.lower() not in ["income", "salary"] else abs(amount)
 
@@ -107,7 +108,7 @@ async def handle_view(update, context, user_id, text):
 		pattern_all = r"show all\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: via ([^0-9]+))?\.?$"
 		pattern_single = r"show(?: all)?\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: for (today|yesterday|\d{4}-\d{2}-\d{2}))?(?: via ([^0-9]+))?\.?$"
 
-		now = datetime.now()
+		now = datetime.now(IST)
 
 		# --- Ranged Data ---
 		if m := re.fullmatch(pattern_range, text):

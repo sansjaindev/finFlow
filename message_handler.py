@@ -3,7 +3,7 @@ from telegram.ext import ConversationHandler, ContextTypes
 from telegram.constants import ParseMode
 from config import supabase
 from datetime import datetime, timedelta
-from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM
+from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, IST
 from parser import parse_expense
 
 
@@ -43,13 +43,13 @@ async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	date_input = update.message.text.strip()
 	if date_input.lower() == "today":
-		created_at = datetime.now().isoformat()
+		created_at = datetime.now(IST).isoformat()
 
 	elif date_input.lower() == "yesterday":
-		created_at = (datetime.now() - timedelta(1)).isoformat()
+		created_at = (datetime.now(IST) - timedelta(1)).isoformat()
 	
 	elif date_input.lower() == "day before yesterday":
-		created_at = (datetime.now() - timedelta(2)).isoformat()
+		created_at = (datetime.now(IST) - timedelta(2)).isoformat()
 
 	else:
 		try:
@@ -151,7 +151,7 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 	created_at = (
 		datetime.strptime(date_str, "%Y-%m-%d").isoformat() if date_str
-		else datetime.now().isoformat()
+		else datetime.now(IST).isoformat()
 	)
 	final_amount = -abs(amount) if category.lower() not in ["income", "salary"] else abs(amount)
 

@@ -369,9 +369,6 @@ async def handle_reports(update, context, user_id, text):
 		await update.message.reply_text("⚠️ Could not process request.")
 
 
-
-
-
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await update.message.reply_text("❌ Cancelled.")
 	return ConversationHandler.END

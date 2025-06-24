@@ -11,7 +11,7 @@ from config import (
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
 from parser import parse_expense
-from operation import handle_insert, handle_update, handle_view
+from operation import handle_insert, handle_update, handle_view, handle_reports
 
 # --- /start ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -142,6 +142,10 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		# --- 3. Otherwise, assume View Request ---
 		if text_lower.startswith("show"):
 			await handle_view(update, context, user_id, text_lower)
+			return
+		
+		if text_lower.startswith("generate"):
+			await handle_reports(update, context, user_id, text_lower)
 			return
 
 		# --- 4. Fallback if nothing matched ---

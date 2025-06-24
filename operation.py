@@ -8,7 +8,8 @@ from telegram import Update
 import os
 import random
 from config import IST
-
+import pandas as pd
+from io import BytesIO
 
 async def send_daily_reminder(app):
 	CHAT_ID = int(os.getenv("CHAT_ID"))
@@ -237,6 +238,138 @@ async def handle_view(update, context, user_id, text):
 	except Exception as e:
 		print("Free-form error:", e)
 		await update.message.reply_text("⚠️ Could not process request.")
+
+
+async def handle_reports(update, context, user_id, text):
+	try:
+		query = supabase.table("Expenses").select("*").eq("user_id", user_id)
+
+		pattern_range_report = r"generate (?:a )?report for(?: all)?\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?\s*from (\d{4}-\d{2}-\d{2}) (?:to|till) (yesterday|today|\d{4}-\d{2}-\d{2})(?: via ([^0-9]+))?\.?$"
+		pattern_all_report = r"generate (?:a )?report for all\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: via ([^0-9]+))?\.?$"
+		pattern_single_report = r"generate (?:a )?report for(?: all)?\s*(income|expenses|transactions)?(?: of ([^0-9]+?))?(?: for (today|yesterday|\d{4}-\d{2}-\d{2}))?(?: via ([^0-9]+))?\.?$"
+
+		now = datetime.now(IST)
+
+		# --- Ranged Data ---
+		if m := re.fullmatch(pattern_range_report, text):
+			txn_type, category, start, end, wallet = m.groups()
+			start_dt = datetime.strptime(start, "%Y-%m-%d")
+			end_dt = (
+				now - timedelta(days=1) if end == "yesterday"
+				else now if end == "today"
+				else datetime.strptime(end, "%Y-%m-%d")
+			)
+
+			query = query.gte("created_at", start_dt.replace(hour=0, minute=0, second=0).isoformat()) \
+						.lte("created_at", end_dt.replace(hour=23, minute=59, second=59).isoformat())
+
+			if txn_type == "income":
+				query = query.gt("amount", 0)
+			elif txn_type == "expenses":
+				query = query.lt("amount", 0)
+
+			if category:
+				query = apply_multi_ilike(query, "category", category)
+			if wallet:
+				query = apply_multi_ilike(query, "wallet", wallet)
+
+
+		# --- All data ---
+		elif m := re.fullmatch(pattern_all_report, text):
+			txn_type, category, wallet = m.groups()
+
+			if txn_type == "income":
+				query = query.gt("amount", 0)
+			elif txn_type == "expenses":
+				query = query.lt("amount", 0)
+
+			if category:
+				query = apply_multi_ilike(query, "category", category)
+			if wallet:
+				query = apply_multi_ilike(query, "wallet", wallet)
+
+
+		# --- Single Day (or default to today) ---
+		elif m := re.fullmatch(pattern_single_report, text):
+			txn_type, category, date_str, wallet = m.groups()
+
+			if not date_str or date_str == "today":
+				target_date = now
+			elif date_str == "yesterday":
+				target_date = now - timedelta(1)
+			else:
+				target_date = datetime.strptime(date_str, "%Y-%m-%d")
+
+			start_dt = target_date.replace(hour=0, minute=0, second=0)
+			end_dt = target_date.replace(hour=23, minute=59, second=59)
+
+			query = query.gte("created_at", start_dt.isoformat()).lte("created_at", end_dt.isoformat())
+
+			if txn_type == "income":
+				query = query.gt("amount", 0)
+			elif txn_type == "expenses":
+				query = query.lt("amount", 0)
+
+			if category:
+				query = apply_multi_ilike(query, "category", category)
+			if wallet:
+				query = apply_multi_ilike(query, "wallet", wallet)
+
+
+		else:
+			await update.message.reply_text(
+				"❌ Unrecognized format.\n"
+				"Try:\n"
+				"• `Show expenses`\n"
+				"• `Show income of salary for yesterday`\n"
+				"• `Show all transactions`\n"
+				"• `Show expenses of food from 2025-06-01 to 2025-06-10`"
+			)
+			return
+		
+		data = query.order("created_at", desc=True).execute().data
+
+		if not data:
+			await update.message.reply_text("ℹ️ No transactions found.")
+			return
+		
+		
+		t_created_at = []
+		t_type = []
+		t_cat = []
+		t_amt = []
+		t_wallet = []
+		t_note = []
+
+		for txn in data:
+			t_created_at.append(txn['created_at'])
+			t_type.append("Income" if txn['amount'] > 0 else "Expense")
+			t_cat.append(txn['category'])
+			t_amt.append(abs(txn['amount']))
+			t_wallet.append(txn['wallet'])
+			t_note.append(txn['note'])
+
+		file_data = pd.DataFrame({
+			'Date': t_created_at,
+			'Transaction Type': t_type,
+			'Category': t_cat,
+			'Amount': t_amt,
+			'Wallet': t_wallet,
+			'Note': t_note
+		})
+		
+		excel_buffer = BytesIO()
+		file_data.to_excel(excel_buffer, index=False)
+		excel_buffer.seek(0)
+
+		await update.message.reply_document(document=excel_buffer, filename="transactions.xlsx")
+		
+	except Exception as e:
+		print("Free-form error:", e)
+		await update.message.reply_text("⚠️ Could not process request.")
+
+
+
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):

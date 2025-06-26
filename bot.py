@@ -20,8 +20,7 @@ from config import (
 )
 from entry_point import (
     start, income_command,
-    expense_command, update_command,
-	delete_command,
+    expense_command,
 	get_update_free_form, get_delete_free_form,
 	free_form_handler
 )
@@ -34,9 +33,9 @@ conv_handler = ConversationHandler(
 	entry_points=[
 		CommandHandler("inc", income_command),
 		CommandHandler("exp", expense_command),
-		CommandHandler("update", update_command),
+		MessageHandler(filters.Regex(r"^/update_(\d+)$"), get_update_id),
 		MessageHandler(filters.Regex(r"(?i)update transaction (\d+)$") & ~filters.COMMAND, get_update_free_form),
-		CommandHandler("delete", delete_command),
+		MessageHandler(filters.Regex(r"^/delete_(\d+)$"), get_delete_id),
 		MessageHandler(filters.Regex(r"(?i)^delete transaction \d+$") & ~filters.COMMAND, get_delete_free_form),
 ],
 	states={

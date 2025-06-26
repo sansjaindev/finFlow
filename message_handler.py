@@ -89,7 +89,7 @@ async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Step 1: Update ID ---
 async def get_update_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	context.user_data["update_id"] = update.message.text.strip()
+	context.user_data["update_id"] = update.message.text.strip().split("_")[1]
 	user_id = update.effective_user.id
 	txn_id = context.user_data["update_id"]
 
@@ -183,7 +183,7 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Step 1: Delete ID ---
 async def get_delete_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	context.user_data["delete_id"] = update.message.text.strip()
+	context.user_data["delete_id"] = update.message.text.strip().split("_")[1]
 	user_id = update.effective_user.id
 	txn_id = context.user_data["delete_id"]
 

@@ -10,6 +10,7 @@ from config import (
 )
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
+from message_handler import get_delete_id, get_update_id
 from parser import parse_expense
 from operation import handle_insert, handle_update, handle_view, handle_reports
 
@@ -32,16 +33,6 @@ async def expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	context.user_data["type"] = "expense"
 	await update.message.reply_text("Enter category for expense:")
 	return CATEGORY
-
-# --- Update Entry Start ---
-async def update_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	await update.message.reply_text("Enter ID of the transaction you want to update:")
-	return UPDATE_ID
-
-# --- Delete Entry Start ---
-async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	await update.message.reply_text("Enter ID of the transaction you want to delete:")
-	return DELETE_ID
 
 
 async def get_update_free_form(update: Update, context: ContextTypes.DEFAULT_TYPE):

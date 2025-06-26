@@ -213,7 +213,10 @@ async def handle_view(update, context, user_id, text):
 				f"🆔 ID {txn['id']}\n"
 				f"{sign} ₹{abs(amt)}\n"
 				f"📂 {txn['category']} | 💳 {txn['wallet']}\n"
-				f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n\n"
+				f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n"
+				f"📝 Update : /update\_{txn['id']}\n"
+				f"❌ Delete  : /delete\_{txn['id']}\n\n"
+				# f"/update\_{txn['id']} | /delete\_{txn['id']}\n\n"
 			)
 		
 		net_total = total_income - total_expense

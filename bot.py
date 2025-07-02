@@ -1,7 +1,7 @@
 from telegram import Update
 from telegram.ext import (
 	ApplicationBuilder, CommandHandler, MessageHandler,
-	ConversationHandler, filters
+	ConversationHandler, filters, CallbackQueryHandler
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
@@ -10,18 +10,22 @@ from operation import cancel, send_daily_reminder
 from message_handler import (
     get_category, get_amount, get_note, get_date, get_wallet,
     get_update_id, get_update_data, confirm_update,
-	get_delete_id, confirm_delete
+	get_delete_id, confirm_delete,
+	budget_callback_handler,
+	get_budget_month, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
     CATEGORY, AMOUNT, DATE, NOTE, WALLET,
     UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
-	DELETE_ID, DELETE_CONFIRM
+	DELETE_ID, DELETE_CONFIRM,
+	BUDGET_MENU, BUDGET_MONTH, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT
 )
 from entry_point import (
     start, income_command,
     expense_command,
 	get_update_free_form, get_delete_free_form,
+	budget_command,
 	free_form_handler
 )
 
@@ -33,11 +37,12 @@ conv_handler = ConversationHandler(
 	entry_points=[
 		CommandHandler("inc", income_command),
 		CommandHandler("exp", expense_command),
+		CommandHandler("budget", budget_command),	
 		MessageHandler(filters.Regex(r"^/update_(\d+)$"), get_update_id),
 		MessageHandler(filters.Regex(r"(?i)update transaction (\d+)$") & ~filters.COMMAND, get_update_free_form),
 		MessageHandler(filters.Regex(r"^/delete_(\d+)$"), get_delete_id),
 		MessageHandler(filters.Regex(r"(?i)^delete transaction \d+$") & ~filters.COMMAND, get_delete_free_form),
-],
+	],
 	states={
 		CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
 		AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_amount)],
@@ -49,11 +54,21 @@ conv_handler = ConversationHandler(
 		UPDATE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_update)],
 		DELETE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_delete_id)],
 		DELETE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_delete)],
+		BUDGET_MENU: [CallbackQueryHandler(budget_callback_handler, pattern=r"^budget_")],
+		BUDGET_MONTH: [CallbackQueryHandler(get_budget_month, pattern=r"^budget_month:")],
+		BUDGET_WALLET: [CallbackQueryHandler(get_budget_wallet, pattern=r"^budget_wallet:|^budget_wallet_done$")],
+		BUDGET_CATEGORY: [CallbackQueryHandler(get_budget_category, pattern=r"^budget_category:|^budget_category_done$")],
+		BUDGET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_amount)],
+		BUDGET_DEFAULT: [CallbackQueryHandler(get_budget_default, pattern=r"^budget_default_")]
+
 	},
-	fallbacks=[CommandHandler("cancel", cancel)]
+	fallbacks=[CommandHandler("cancel", cancel)],
+	# per_message=True
 )
 
 app.add_handler(CommandHandler("start", start))
+# app.add_handler(CommandHandler("budget", budget_command))
+# app.add_handler(CallbackQueryHandler(budget_callback_handler, pattern=r"^budget_"))
 app.add_handler(conv_handler)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_form_handler))
 

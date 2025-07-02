@@ -1,10 +1,13 @@
 from telegram import Update
 from telegram.ext import ConversationHandler, ContextTypes
 from telegram.constants import ParseMode
-from config import supabase
+from config import BUDGET_AMOUNT, BUDGET_CATEGORY, BUDGET_DEFAULT, BUDGET_WALLET, supabase
 from datetime import datetime, timedelta
-from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, DELETE_ID, DELETE_CONFIRM, IST
+from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, DELETE_ID, DELETE_CONFIRM, IST, BUDGET_MONTH
 from parser import parse_expense
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from dateutil.relativedelta import relativedelta
+
 
 
 # --- Step 1: Category ---
@@ -236,3 +239,147 @@ async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		await update.message.reply_text("⚠️ Failed to delete transaction.")
 
 	return ConversationHandler.END
+
+
+async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+
+	if query.data == "budget_view":
+		print("Viewing budget")
+
+	if query.data == "budget_add":
+		print("adding budget")
+		return await get_budget_details(update, context)
+	
+	if query.data == "budger_remove":
+		print("removing budget")
+
+	return ConversationHandler.END
+
+async def get_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	print("Getting budget month")
+
+	now = datetime.now()
+	months = [(now + relativedelta(months=i)).strftime("%Y-%m") for i in range(3)]
+	buttons = [[InlineKeyboardButton(m, callback_data=f"budget_month:{m}")] for m in months]
+
+	await query.message.reply_text("📅 Select the month for which you want to set the budget:", reply_markup=InlineKeyboardMarkup(buttons))
+	# await query.edit_message_text("📅 Select the month for which you want to set the budget:", reply_markup=InlineKeyboardMarkup(buttons))
+	print("USer is entering months")
+	return BUDGET_MONTH
+
+async def get_budget_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	print("budget month recieved")
+	print("Getting wallet")
+
+	month = query.data.split(":")[1]
+	context.user_data["budget_month"] = month
+
+	# Placeholder — Replace this with actual wallets from DB later
+	user_wallets = ["UPI", "Cash", "Card"]
+	buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in user_wallets]
+	buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])
+
+	await query.message.reply_text("💳 Select wallet(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
+	context.user_data["budget_wallets"] = []
+	return BUDGET_WALLET
+
+async def get_budget_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	print("Wallet recieved")
+	print("getting category")
+
+	if query.data == "budget_wallet_done":
+		# Move to categories
+		user_categories = ["Food", "Travel", "Health"]  # Placeholder – fetch from DB
+		buttons = [[InlineKeyboardButton(c, callback_data=f"budget_category:{c}")] for c in user_categories]
+		buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_category_done")])
+		await query.message.reply_text("📂 Select category(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
+		context.user_data["budget_categories"] = []
+		return BUDGET_CATEGORY
+
+	# Add wallet
+	wallet = query.data.split(":")[1]
+	if wallet not in context.user_data["budget_wallets"]:
+		context.user_data["budget_wallets"].append(wallet)
+
+	await query.message.reply_text(f"✔️ Added wallet: {wallet}")
+	return BUDGET_WALLET
+
+async def get_budget_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	print("Cat recieved")
+	print("getting amount")
+
+	if query.data == "budget_category_done":
+		await query.message.reply_text("💰 Now enter the budget amount:")
+		return BUDGET_AMOUNT
+
+	category = query.data.split(":")[1]
+	if category not in context.user_data["budget_categories"]:
+		context.user_data["budget_categories"].append(category)
+
+	await query.message.reply_text(f"✔️ Added category: {category}")
+	return BUDGET_CATEGORY
+
+async def get_budget_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	try:
+		amount = float(update.message.text.strip())
+		context.user_data["budget_amount"] = amount
+
+		keyboard = InlineKeyboardMarkup([
+			[InlineKeyboardButton("Yes ✅", callback_data="budget_default_yes"),
+			 InlineKeyboardButton("No ❌", callback_data="budget_default_no")]
+		])
+		await update.message.reply_text("Do you want to make this a default budget?", reply_markup=keyboard)
+		return BUDGET_DEFAULT
+	except:
+		await update.message.reply_text("❌ Please enter a valid number.")
+		return BUDGET_AMOUNT
+
+async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+
+	is_default = query.data.endswith("yes")
+	print(is_default)
+
+	# Store the budget
+	user_id = update.effective_user.id
+	data = {
+		"user_id": user_id,
+		"month": context.user_data["budget_month"],
+		"wallets": context.user_data.get("budget_wallets", []),
+		"categories": context.user_data.get("budget_categories", []),
+		"amount": context.user_data["budget_amount"],
+		"is_default": is_default
+	}
+
+	# Save to Supabase (replace with actual code)
+	try:
+		response = supabase.table("Budgets").insert({
+			"user_id" : data["user_id"],
+			"month" : data["month"],
+			"amount" : data["amount"],
+			"wallets" : data["wallets"],
+			"categories" : data["categories"],
+			"is_default" : data["is_default"],
+			"created_at" : datetime.now().isoformat()
+		}).execute()
+
+		await update.callback_query.message.reply_text("✅ Budget saved successfully!")	
+	
+	except Exception as e:
+		print("Error saving budget:", e)
+		await update.callback_query.message.reply_text("❌ Failed to save budget. Please try again later.")
+
+	return ConversationHandler.END
+
+

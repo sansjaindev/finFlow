@@ -12,14 +12,14 @@ from message_handler import (
     get_update_id, get_update_data, confirm_update,
 	get_delete_id, confirm_delete,
 	budget_callback_handler,
-	get_budget_month, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default
+	get_budget_start, get_budget_end, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
     CATEGORY, AMOUNT, DATE, NOTE, WALLET,
     UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
 	DELETE_ID, DELETE_CONFIRM,
-	BUDGET_MENU, BUDGET_MONTH, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT
+	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT
 )
 from entry_point import (
     start, income_command,
@@ -55,7 +55,8 @@ conv_handler = ConversationHandler(
 		DELETE_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_delete_id)],
 		DELETE_CONFIRM: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_delete)],
 		BUDGET_MENU: [CallbackQueryHandler(budget_callback_handler, pattern=r"^budget_")],
-		BUDGET_MONTH: [CallbackQueryHandler(get_budget_month, pattern=r"^budget_month:")],
+		BUDGET_START_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_start)],
+		BUDGET_END_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_end)],
 		BUDGET_WALLET: [CallbackQueryHandler(get_budget_wallet, pattern=r"^budget_wallet:|^budget_wallet_done$")],
 		BUDGET_CATEGORY: [CallbackQueryHandler(get_budget_category, pattern=r"^budget_category:|^budget_category_done$")],
 		BUDGET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_amount)],

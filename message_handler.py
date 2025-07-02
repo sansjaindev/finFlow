@@ -1,13 +1,18 @@
 from telegram import Update
 from telegram.ext import ConversationHandler, ContextTypes
 from telegram.constants import ParseMode
-from config import BUDGET_AMOUNT, BUDGET_CATEGORY, BUDGET_DEFAULT, BUDGET_WALLET, supabase
 from datetime import datetime, timedelta
-from config import AMOUNT, WALLET, NOTE, DATE, UPDATE_DATA, UPDATE_CONFIRM, DELETE_ID, DELETE_CONFIRM, IST, BUDGET_MONTH
+from config import (
+	supabase,
+    IST, 
+    AMOUNT, WALLET, NOTE, DATE,
+    UPDATE_DATA, UPDATE_CONFIRM,
+    DELETE_CONFIRM,
+    BUDGET_START_DATE, BUDGET_END_DATE,
+	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT
+)
 from parser import parse_expense
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from dateutil.relativedelta import relativedelta
-
 
 
 # --- Step 1: Category ---
@@ -249,62 +254,102 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 		print("Viewing budget")
 
 	if query.data == "budget_add":
-		print("adding budget")
-		return await get_budget_details(update, context)
+		await query.message.reply_text("📅 Enter budget start date (YYYY-MM-DD).")
+		return BUDGET_START_DATE
 	
 	if query.data == "budger_remove":
 		print("removing budget")
 
 	return ConversationHandler.END
 
-async def get_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	query = update.callback_query
-	await query.answer()
-	print("Getting budget month")
+# --- Step 1: Budget Start Date ---
+async def get_budget_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	# query = update.callback_query
+	# await query.answer()
 
-	now = datetime.now()
-	months = [(now + relativedelta(months=i)).strftime("%Y-%m") for i in range(3)]
-	buttons = [[InlineKeyboardButton(m, callback_data=f"budget_month:{m}")] for m in months]
+	try:
+		start_date = datetime.strptime(update.message.text.strip(), '%Y-%m-%d').isoformat()
+		context.user_data["budget_start"] = str(start_date)
+		await update.message.reply_text("📅 Enter budget end date (YYYY-MM-DD).")
+		return BUDGET_END_DATE
 
-	await query.message.reply_text("📅 Select the month for which you want to set the budget:", reply_markup=InlineKeyboardMarkup(buttons))
-	# await query.edit_message_text("📅 Select the month for which you want to set the budget:", reply_markup=InlineKeyboardMarkup(buttons))
-	print("USer is entering months")
-	return BUDGET_MONTH
+	except Exception as e:
+		await update.message.reply_text("❌ Invalid format. Use YYYY-MM-DD.")
+		return BUDGET_START_DATE
 
-async def get_budget_month(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	query = update.callback_query
-	await query.answer()
-	print("budget month recieved")
-	print("Getting wallet")
+# --- Step 2: Budget End Date ---
+async def get_budget_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	try:
+		end_date = datetime.strptime(update.message.text.strip(), '%Y-%m-%d').isoformat()
+		start_date = context.user_data["budget_start"]
 
-	month = query.data.split(":")[1]
-	context.user_data["budget_month"] = month
+		if end_date <= start_date:
+			await update.message.reply_text("⚠️ End date must be after start date. Try again:")
+			return BUDGET_END_DATE
+		
+		context.user_data["budget_end"] = str(end_date)
+		user_id = update.effective_user.id
 
-	# Placeholder — Replace this with actual wallets from DB later
-	user_wallets = ["UPI", "Cash", "Card"]
-	buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in user_wallets]
-	buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])
+		try:
+			result = supabase.table("Expenses") \
+							.select("wallet") \
+							.eq("user_id", user_id) \
+							.execute()
+			
+			wallets = list({txn["wallet"] for txn in result.data if txn.get("wallet")})
+			wallets.sort()
 
-	await query.message.reply_text("💳 Select wallet(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
-	context.user_data["budget_wallets"] = []
-	return BUDGET_WALLET
+			if not wallets:
+				wallets = ["UPI", "Cash", "Card"]
+			
+			buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in wallets]
+			buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])
+			await update.message.reply_text("💳 Select wallet(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
+			context.user_data["budget_wallets"] = []
+			return BUDGET_WALLET
+		
+		except Exception as e:
+			await update.message.reply_text("⚠️ Failed to fetch wallets. Try again.")
+			return ConversationHandler.END
+	
+	except Exception as e:
+		await update.message.reply_text("❌ Invalid format. Use YYYY-MM-DD.")
+		return BUDGET_END_DATE
 
+# --- Step 3: Buget Wallets ---
 async def get_budget_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	query = update.callback_query
 	await query.answer()
-	print("Wallet recieved")
-	print("getting category")
 
 	if query.data == "budget_wallet_done":
-		# Move to categories
-		user_categories = ["Food", "Travel", "Health"]  # Placeholder – fetch from DB
-		buttons = [[InlineKeyboardButton(c, callback_data=f"budget_category:{c}")] for c in user_categories]
-		buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_category_done")])
-		await query.message.reply_text("📂 Select category(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
-		context.user_data["budget_categories"] = []
-		return BUDGET_CATEGORY
+		user_id = update.effective_user.id
+		try:
+			result = supabase.table("Expenses") \
+				.select("category") \
+				.eq("user_id", user_id) \
+				.execute()
+			
+			categories = list({txn["category"] for txn in result.data if txn.get("category")})
+			categories.sort()
 
-	# Add wallet
+			if not categories:
+				categories = ["Food", "Travel", "Health"]\
+				
+			buttons = [[InlineKeyboardButton(c, callback_data=f"budget_category:{c}")] for c in categories]
+			buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_category_done")])
+			
+			await query.message.reply_text("📂 Select category(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
+			context.user_data["budget_categories"] = []
+			return BUDGET_CATEGORY
+
+
+
+		except Exception as e:
+			print("Error fetching categories:", e)
+			await query.message.reply_text("⚠️ Failed to fetch categories. Try again.")
+			return ConversationHandler.END
+
+
 	wallet = query.data.split(":")[1]
 	if wallet not in context.user_data["budget_wallets"]:
 		context.user_data["budget_wallets"].append(wallet)
@@ -312,11 +357,10 @@ async def get_budget_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await query.message.reply_text(f"✔️ Added wallet: {wallet}")
 	return BUDGET_WALLET
 
+# --- Step 4: Budget Categories ---
 async def get_budget_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	query = update.callback_query
 	await query.answer()
-	print("Cat recieved")
-	print("getting amount")
 
 	if query.data == "budget_category_done":
 		await query.message.reply_text("💰 Now enter the budget amount:")
@@ -329,6 +373,7 @@ async def get_budget_category(update: Update, context: ContextTypes.DEFAULT_TYPE
 	await query.message.reply_text(f"✔️ Added category: {category}")
 	return BUDGET_CATEGORY
 
+# --- Step 5: Budget Amount ---
 async def get_budget_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	try:
 		amount = float(update.message.text.strip())
@@ -344,34 +389,38 @@ async def get_budget_amount(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		await update.message.reply_text("❌ Please enter a valid number.")
 		return BUDGET_AMOUNT
 
+# --- Budget Default ---
 async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	query = update.callback_query
 	await query.answer()
 
 	is_default = query.data.endswith("yes")
-	print(is_default)
 
-	# Store the budget
 	user_id = update.effective_user.id
-	data = {
-		"user_id": user_id,
-		"month": context.user_data["budget_month"],
-		"wallets": context.user_data.get("budget_wallets", []),
-		"categories": context.user_data.get("budget_categories", []),
-		"amount": context.user_data["budget_amount"],
-		"is_default": is_default
-	}
+	start_date = context.user_data["budget_start"],
+	end_date = context.user_data["budget_end"],
+	wallets = context.user_data.get("budget_wallets", [])
+	categories = context.user_data.get("budget_categories", [])
+	amount = context.user_data["budget_amount"]
+
+	if not wallets:
+		wallets = ["__ALL__"]
+
+	if not categories:
+		categories = ["__ALL__"]
+
 
 	# Save to Supabase (replace with actual code)
 	try:
 		response = supabase.table("Budgets").insert({
-			"user_id" : data["user_id"],
-			"month" : data["month"],
-			"amount" : data["amount"],
-			"wallets" : data["wallets"],
-			"categories" : data["categories"],
-			"is_default" : data["is_default"],
-			"created_at" : datetime.now().isoformat()
+			"user_id" : user_id,
+			"start_date" : start_date,
+			"end_date" : end_date,
+			"amount" : amount,
+			"wallets" : wallets,
+			"categories" : categories,
+			"is_default" : is_default,
+			"created_at" : datetime.now(IST).isoformat()
 		}).execute()
 
 		await update.callback_query.message.reply_text("✅ Budget saved successfully!")	

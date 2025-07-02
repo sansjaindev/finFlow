@@ -1,16 +1,15 @@
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from config import CATEGORY, UPDATE_ID
 from config import (
 	supabase,
+	CATEGORY,
 	UPDATE_DATA,
 	DELETE_CONFIRM,
 	BUDGET_MENU
 )
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes, ConversationHandler
-from message_handler import get_delete_id, get_update_id
 from parser import parse_expense
 from operation import handle_insert, handle_update, handle_view, handle_reports
 
@@ -33,6 +32,28 @@ async def expense_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	context.user_data["type"] = "expense"
 	await update.message.reply_text("Enter category for expense:")
 	return CATEGORY
+
+# --- Budget Start ---
+async def budget_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	keyboard = [
+		[
+			InlineKeyboardButton("➕ Add Budget", callback_data="budget_add"),
+			InlineKeyboardButton("📊 View Budget", callback_data="budget_view")
+		],
+		[
+			InlineKeyboardButton("🗑️ Remove Budget", callback_data="budget_remove")
+		]
+	]
+
+	reply_markup = InlineKeyboardMarkup(keyboard)
+	
+	await update.message.reply_text(
+		"💰 *What would you like to do with your budget?*",
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+	)
+
+	return BUDGET_MENU
 
 
 async def get_update_free_form(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -145,29 +166,5 @@ async def free_form_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	except Exception as e:
 		print("Transaction Handler Error:", e)
 		await update.message.reply_text("⚠️ Something went wrong while processing your request.")
-
-
-async def budget_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	keyboard = [
-		[
-			InlineKeyboardButton("➕ Add Budget", callback_data="budget_add"),
-			InlineKeyboardButton("📊 View Budget", callback_data="budget_view")
-		],
-		[
-			InlineKeyboardButton("🗑️ Remove Budget", callback_data="budget_remove")
-		]
-	]
-
-	reply_markup = InlineKeyboardMarkup(keyboard)
-	
-	await update.message.reply_text(
-		"💰 *What would you like to do with your budget?*",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-	)
-
-	print("options for budgetting")
-
-	return BUDGET_MENU
 
 

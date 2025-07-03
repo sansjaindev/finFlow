@@ -12,14 +12,16 @@ from message_handler import (
     get_update_id, get_update_data, confirm_update,
 	get_delete_id, confirm_delete,
 	budget_callback_handler,
-	get_budget_start, get_budget_end, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default
+	get_budget_start, get_budget_end, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default,
+	get_budget_list, show_budget_details, 
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
     CATEGORY, AMOUNT, DATE, NOTE, WALLET,
     UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
 	DELETE_ID, DELETE_CONFIRM,
-	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT
+	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT,
+	BUDGET_VIEW_CHOICE, BUDGET_SELECT
 )
 from entry_point import (
     start, income_command,
@@ -60,7 +62,9 @@ conv_handler = ConversationHandler(
 		BUDGET_WALLET: [CallbackQueryHandler(get_budget_wallet, pattern=r"^budget_wallet:|^budget_wallet_done$")],
 		BUDGET_CATEGORY: [CallbackQueryHandler(get_budget_category, pattern=r"^budget_category:|^budget_category_done$")],
 		BUDGET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_amount)],
-		BUDGET_DEFAULT: [CallbackQueryHandler(get_budget_default, pattern=r"^budget_default_")]
+		BUDGET_DEFAULT: [CallbackQueryHandler(get_budget_default, pattern=r"^budget_default_")],
+		BUDGET_VIEW_CHOICE: [CallbackQueryHandler(get_budget_list, pattern=r"^budget_view_(active|all)$")],
+		BUDGET_SELECT: [CallbackQueryHandler(show_budget_details, pattern=r"^budget_select:\d+$")],
 
 	},
 	fallbacks=[CommandHandler("cancel", cancel)],

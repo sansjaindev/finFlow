@@ -4,12 +4,13 @@ from telegram.constants import ParseMode
 from datetime import datetime, timedelta
 from config import (
 	supabase,
-    IST, 
-    AMOUNT, WALLET, NOTE, DATE,
-    UPDATE_DATA, UPDATE_CONFIRM,
-    DELETE_CONFIRM,
-    BUDGET_START_DATE, BUDGET_END_DATE,
-	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT
+	IST, 
+	AMOUNT, WALLET, NOTE, DATE,
+	UPDATE_DATA, UPDATE_CONFIRM,
+	DELETE_CONFIRM,
+	BUDGET_START_DATE, BUDGET_END_DATE,
+	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT,
+	BUDGET_VIEW_CHOICE, BUDGET_SELECT,
 )
 from parser import parse_expense
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -251,7 +252,19 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 	await query.answer()
 
 	if query.data == "budget_view":
-		print("Viewing budget")
+		keyboard = [
+			[InlineKeyboardButton("📅 Active Budgets", callback_data="budget_view_active")],
+			[InlineKeyboardButton("🗂️ All Budgets", callback_data="budget_view_all")]
+		]
+		
+		await query.message.reply_text(
+			"📊 *Which budgets do you want to view?*",
+			parse_mode="Markdown",
+			reply_markup=InlineKeyboardMarkup(keyboard)
+		)
+
+		return BUDGET_VIEW_CHOICE
+
 
 	if query.data == "budget_add":
 		await query.message.reply_text("📅 Enter budget start date (YYYY-MM-DD).")
@@ -430,5 +443,106 @@ async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE)
 		await update.callback_query.message.reply_text("❌ Failed to save budget. Please try again later.")
 
 	return ConversationHandler.END
+
+
+async def get_budget_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+
+	user_id = update.effective_user.id
+	today = datetime.now(IST).date()
+
+	try:
+		result = supabase.table("Budgets") \
+							.select("*") \
+							.eq("user_id", user_id) \
+							.execute()
+		
+		budgets = result.data
+
+		if query.data == "budget_view_active":
+			budgets = [b for b in budgets if datetime.strptime(b["start_date"], '%Y-%m-%d').date() <= today <= datetime.strptime(b["end_date"], '%Y-%m-%d').date()]
+
+		if not budgets:
+			await query.message.reply_text("ℹ️ No budgets found for your selection.")
+			return ConversationHandler.END
+		
+		context.user_data["budget_list"] = {str(i): b for i, b in enumerate(budgets)}
+
+		buttons = [
+			[InlineKeyboardButton(f"🗓️ {b['start_date']} to {b['end_date']} | ₹{int(b['amount'])}", callback_data=f"budget_select:{i}")]
+			for i, b in context.user_data["budget_list"].items()
+		]
+		
+		await query.message.reply_text("📋 Select a budget to view details:", reply_markup=InlineKeyboardMarkup(buttons))
+		return BUDGET_SELECT
+
+	
+	except Exception as e:
+		await query.message.reply_text("⚠️ Failed to fetch budgets. Try again later.")
+		return ConversationHandler.END
+
+
+
+async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	index = query.data.split(":")[1]
+	budget = context.user_data["budget_list"].get(index)
+
+	if not budget:
+		await query.message.reply_text("⚠️ Budget not found.")
+		return ConversationHandler.END
+
+	start = datetime.strptime(budget["start_date"], '%Y-%m-%d')
+	end = datetime.strptime(budget["end_date"], '%Y-%m-%d')
+	amount = float(budget["amount"])
+	days_total = (end - start).days + 1
+	today = datetime.now(IST).date()
+	days_passed = (today - start.date()).days + 1 if start.date() <= today <= end.date() else days_total
+
+	try:
+		result = supabase.table("Expenses") \
+			.select("amount,created_at") \
+			.eq("user_id", update.effective_user.id) \
+			.gte("created_at", start.isoformat()) \
+			.lte("created_at", end.isoformat()) \
+			.lt("amount", 0) \
+			.execute()
+
+		spent = abs(sum(float(t["amount"]) for t in result.data))
+		remaining = amount - spent
+		avg_daily = spent / days_passed if days_passed > 0 else 0
+		optimal_daily = amount / days_total if days_total > 0 else 0
+
+		msg = (
+			f"📊 *Budget Status for*\n"
+			f"👛 *Wallets: {', '.join(['ALL'] if budget.get('wallets')[0] == '__ALL__' else budget.get('wallets', []))}*\n"
+			f"📂 *Categories: {', '.join(['ALL'] if budget.get('categories')[0] == '__ALL__' else budget.get('categories', []))}*\n"
+			f"🗓️ *{start.date()} → {end.date()}*:\n\n"
+			f"💰 Budgeted: ₹{amount}\n"
+			f"💸 Spent: ₹{spent:.2f}\n"
+			f"💼 Remaining: ₹{remaining:.2f}\n"
+			f"📈 Daily Spend Avg: ₹{avg_daily:.2f}\n"
+			f"✅ Optimal Daily: ₹{optimal_daily:.2f}\n"
+			f"📈 *Predicted Total Spend* : ₹{(avg_daily * days_total):.0f}"
+		)
+
+		if today <= end.date():
+			if avg_daily * days_total > amount:
+				msg += " ❗\n\n⚠️ *You’re on track to exceed your budget.*"
+			elif remaining < amount * 0.2:
+				msg += "\n\n⚠️ *You’re close to exhausting your budget.*"
+			else:
+				msg += "\n\n✅ *You're within budget.*"
+
+		await query.message.reply_text(msg, parse_mode="Markdown")
+
+	except Exception as e:
+		print("Budget stats error:", e)
+		await query.message.reply_text("❌ Failed to compute budget statistics.")
+
+	return ConversationHandler.END
+
 
 

@@ -6,7 +6,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 from aiohttp import web
-from operation import cancel, send_daily_reminder
+from operation import cancel, send_daily_reminder, reset_default_budgets
 from message_handler import (
     get_category, get_amount, get_note, get_date, get_wallet,
     get_update_id, get_update_data, confirm_update,
@@ -98,6 +98,7 @@ async def main():
 
 	schedular = AsyncIOScheduler(timezone="Asia/Kolkata")
 	schedular.add_job(send_daily_reminder, "cron", hour=22, minute=00, args=[app])
+	schedular.add_job(reset_default_budgets, "cron", hour=00, minute=00, args=[app])
 	schedular.start()
 	await asyncio.Event().wait()
 

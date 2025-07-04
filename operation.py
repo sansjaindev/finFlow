@@ -24,6 +24,44 @@ async def send_daily_reminder(app):
 	except Exception as e:
 		print("Failed to send scheduled message:", e)
 
+async def reset_default_budgets(app):
+	CHAT_ID = int(os.getenv("CHAT_IT"))
+	try:
+		today = datetime.now(IST).date()
+
+		response = supabase.table("Budgets") \
+							.select("*") \
+							.eq("is_default", True) \
+							.lt("end_date", today.isoformat()) \
+							.execute()
+		
+		for budget in response.data:
+			old_start = datetime.strptime(budget["start_date"], '%Y-%m-%d').date()
+			old_end = datetime.strptime(budget["end_date"], '%Y-%m-%d').date()
+			duration = (old_end - old_start).days + 1
+
+			new_start = old_end + timedelta(days=1)
+			new_end = new_start + timedelta(days=duration - 1)
+
+			supabase.table("Budgets").insert({
+				"user_id" : budget["user_id"],
+				"start_date" : new_start.isoformat(),
+				"end_date" : new_end.isoformat(),
+				"amount" : budget["amount"],
+				"wallets" : budget["wallets"],
+				"categories" : budget["categories"],
+				"is_default" : True,
+				"created_at" : datetime.now(IST).isoformat()
+			}).execute()
+
+			await app.bot.send_message(
+				chat_id=CHAT_ID,
+				text="Default budget rolled over for use."
+			)
+
+	except Exception as e:
+		print("❌ Failed to roll over default budgets:", e)
+
 
 async def handle_insert(update, context, user_id, parsed):
 	category, amount, wallet, note, date_str = parsed

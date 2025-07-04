@@ -503,14 +503,20 @@ async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 	try:
 		result = supabase.table("Expenses") \
-			.select("amount,created_at") \
+			.select("amount,created_at,wallet,category") \
 			.eq("user_id", update.effective_user.id) \
 			.gte("created_at", start.isoformat()) \
 			.lte("created_at", end.isoformat()) \
 			.lt("amount", 0) \
 			.execute()
+		
+		txns = [
+			t for t in result.data
+			if (budget["wallets"][0] == "__ALL__" or t["wallet"] in budget["wallets"])
+			and (budget["categories"][0] == "__ALL__" or t["category"] in budget["categories"])
+		]
 
-		spent = abs(sum(float(t["amount"]) for t in result.data))
+		spent = abs(sum(float(t["amount"]) for t in txns))
 		remaining = amount - spent
 		avg_daily = spent / days_passed if days_passed > 0 else 0
 		optimal_daily = amount / days_total if days_total > 0 else 0

@@ -144,16 +144,36 @@ async def get_update_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		return UPDATE_DATA
 
 	context.user_data["updated_data"] = parsed
-	await update.message.reply_text("Are you sure you want to update this transaction? Reply with 'yes' to confirm or 'no' to cancel.")
+	keyboard = InlineKeyboardMarkup([
+		[
+			InlineKeyboardButton("✅ Yes", callback_data="update_confirm"),
+			InlineKeyboardButton("❌ No", callback_data="update_cancel")
+		]
+	])
+
+	await update.message.reply_text(
+		"Are you sure you want to update this transaction?",
+		parse_mode=ParseMode.MARKDOWN,
+		reply_markup=keyboard
+	)
+
 	return UPDATE_CONFIRM
 
 # --- Step 3: Confirm Update ---
 async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	response = update.message.text.strip().lower()
-	if response not in ["yes", "confirm", 'y', 'yeah']:
-		await update.message.reply_text("❌ Update cancelled.")
-		return ConversationHandler.END
+	query = update.callback_query
+	await query.answer()
+	action = query.data
 
+	if action == "update_cancel":
+		await query.message.reply_text("❌ Update cancelled.")
+		return ConversationHandler.END
+	
+	if action != "update_confirm":
+		await query.message.reply_text("❌ Invalid action.")
+		return ConversationHandler.END
+	
+	
 	user_id = update.effective_user.id
 	txn_id = context.user_data["update_id"]
 	category, amount, wallet, note, date_str = context.user_data["updated_data"]
@@ -178,14 +198,14 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			return ConversationHandler.END
 
 		display_date = created_at[:10]
-		await update.message.reply_text(
+		await query.message.reply_text(
 			f"✅ Transaction updated:\n*{category.title()}* ₹{abs(final_amount)} via *{wallet}*\n🗓️ {display_date} | 📝 {note}",
 			parse_mode=ParseMode.MARKDOWN
 		)
 
 	except Exception as e:
 		print("Update error:", e)
-		await update.message.reply_text("⚠️ Failed to update transaction.")
+		await query.message.reply_text("⚠️ Failed to update transaction.")
 
 	return ConversationHandler.END
 
@@ -206,14 +226,22 @@ async def get_delete_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 		context.user_data["delete_data"] = data
 
+		keyboard = InlineKeyboardMarkup([
+			[
+				InlineKeyboardButton("✅ Yes", callback_data="delete_confirm"),
+				InlineKeyboardButton("❌ No", callback_data="delete_cancel")
+			]
+		])
+
 		await update.message.reply_text(
 			f"You are about to delete the following transaction:\n\n"
 			f"🆔 ID {txn_id}\n"
 			f"{'🟢 Income' if data['amount'] > 0 else '🔴 Expense'} ₹{abs(data['amount'])}\n"
 			f"📂 {data['category']} | 💳 {data['wallet']}\n"
 			f"🗓️ {data['created_at'][:10]} | 📝 {data.get('note', '')}\n\n"
-			f"Are you sure? Reply with 'yes' to confirm or 'no' to cancel.",
-			parse_mode=ParseMode.MARKDOWN
+			f"Are you sure?",
+			parse_mode=ParseMode.MARKDOWN,
+			reply_markup=keyboard
 		)
 		return DELETE_CONFIRM
 	
@@ -224,11 +252,19 @@ async def get_delete_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- Step 2: Confirm Delete
 async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	reply = update.message.text.strip().lower()
-	if reply not in ["yes", "y", "confirm"]:
-		await update.message.reply_text("❌ Deletion cancelled.")
-		return ConversationHandler.END
+	query = update.callback_query
+	await query.answer()
+	action = query.data
 
+	if action == "delete_cancel":
+		await query.message.reply_text("❌ Deletion cancelled.")
+		return ConversationHandler.END
+	
+	if action != "delete_confirm":
+		await query.message.reply_text("❌ Invalid action.")
+		return ConversationHandler.END
+	
+	
 	user_id = update.effective_user.id
 	txn_id = context.user_data["delete_id"]
 
@@ -236,13 +272,13 @@ async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		delete_result = supabase.table("Expenses").delete().eq("user_id", user_id).eq("id", txn_id).execute()
 
 		if not delete_result.data:
-			await update.message.reply_text("⚠️ Transaction not found or already deleted.")
+			await query.message.reply_text("⚠️ Transaction not found or already deleted.")
 		else:
-			await update.message.reply_text("✅ Transaction successfully deleted.")
+			await query.message.reply_text("✅ Transaction successfully deleted.")
 
 	except Exception as e:
 		print("Delete Error:", e)
-		await update.message.reply_text("⚠️ Failed to delete transaction.")
+		await query.message.reply_text("⚠️ Failed to delete transaction.")
 
 	return ConversationHandler.END
 
@@ -277,9 +313,6 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
 # --- Step 1: Budget Start Date ---
 async def get_budget_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	# query = update.callback_query
-	# await query.answer()
-
 	try:
 		start_date = datetime.strptime(update.message.text.strip(), '%Y-%m-%d').isoformat()
 		context.user_data["budget_start"] = str(start_date)
@@ -481,7 +514,6 @@ async def get_budget_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	except Exception as e:
 		await query.message.reply_text("⚠️ Failed to fetch budgets. Try again later.")
 		return ConversationHandler.END
-
 
 
 async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE):

@@ -469,10 +469,23 @@ async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE)
 	categories = context.user_data.get("budget_categories", [])
 	amount = context.user_data["budget_amount"]
 
-	if not wallets:
+	all_wallets = supabase.table("Expenses") \
+								.select("wallet") \
+								.eq("user_id", user_id) \
+								.execute()
+	
+	all_categories = supabase.table("Expenses") \
+								.select("category") \
+								.eq("user_id", user_id) \
+								.execute()
+	
+	all_wallets = sorted({txn["wallet"] for txn in all_wallets.data if txn.get("wallet")})
+	all_categories = sorted({txn["category"] for txn in all_categories.data if txn.get("category")})
+
+	if not wallets or set(wallets) == set(all_wallets):
 		wallets = ["__ALL__"]
 
-	if not categories:
+	if not categories or set(categories) == set(all_categories):
 		categories = ["__ALL__"]
 
 	# Save to Supabase (replace with actual code)

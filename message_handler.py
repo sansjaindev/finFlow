@@ -10,7 +10,7 @@ from config import (
 	DELETE_CONFIRM,
 	BUDGET_START_DATE, BUDGET_END_DATE,
 	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT,
-	BUDGET_VIEW_CHOICE, BUDGET_SELECT,
+	BUDGET_VIEW_CHOICE,
 )
 from parser import parse_expense
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -67,7 +67,6 @@ async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		except ValueError:
 			await update.message.reply_text("❌ Invalid date format. Use YYYY-MM-DD or type 'today'.")
 			return DATE
-
 
 	user_id = update.effective_user.id
 	amount = abs(context.user_data["amount"])
@@ -455,7 +454,6 @@ async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE)
 	if not categories:
 		categories = ["__ALL__"]
 
-
 	# Save to Supabase (replace with actual code)
 	try:
 		response = supabase.table("Budgets").insert({
@@ -500,41 +498,50 @@ async def get_budget_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			await query.message.reply_text("ℹ️ No budgets found for your selection.")
 			return ConversationHandler.END
 		
-		context.user_data["budget_list"] = {str(i): b for i, b in enumerate(budgets)}
+		context.user_data["budget_list"] = {str(b["id"]): b for b in budgets}
 
-		buttons = [
-			[InlineKeyboardButton(f"🗓️ {b['start_date']} to {b['end_date']} | ₹{int(b['amount'])}", callback_data=f"budget_select:{i}")]
-			for i, b in context.user_data["budget_list"].items()
-		]
+		message = "📋 *Your Budgets:*\n\n"
+		for b in budgets:
+			message += (
+				f"🗓️ {b['start_date']} → {b['end_date']} | ₹{int(b['amount'])}\n"
+				f"🔗 View Budget: /vb\_{b['id']}\n\n"
+			)
 		
-		await query.message.reply_text("📋 Select a budget to view details:", reply_markup=InlineKeyboardMarkup(buttons))
-		return BUDGET_SELECT
+		await query.message.reply_text(message.strip(), parse_mode="Markdown")
+		return ConversationHandler.END
 
-	
 	except Exception as e:
 		await query.message.reply_text("⚠️ Failed to fetch budgets. Try again later.")
 		return ConversationHandler.END
 
 
 async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	query = update.callback_query
-	await query.answer()
-	index = query.data.split(":")[1]
-	budget = context.user_data["budget_list"].get(index)
-
-	if not budget:
-		await query.message.reply_text("⚠️ Budget not found.")
-		return ConversationHandler.END
-
-	start = datetime.strptime(budget["start_date"], '%Y-%m-%d')
-	end = datetime.strptime(budget["end_date"], '%Y-%m-%d')
-	amount = float(budget["amount"])
-	days_total = (end - start).days + 1
-	today = datetime.now(IST).date()
-	days_passed = (today - start.date()).days + 1 if start.date() <= today <= end.date() else days_total
-
+	user_id = update.effective_user.id
+	text = update.message.text.strip()
+	budget_id = text.split("_")[1]
+	
 	try:
-		result = supabase.table("Expenses") \
+		result = supabase.table("Budgets") \
+							.select("*") \
+							.eq("user_id", user_id) \
+							.eq("id", int(budget_id)) \
+							.single() \
+							.execute()
+		
+		budget = result.data
+
+		if not budget:
+			await update.message.reply_text("❌ Budget not found.")
+			return ConversationHandler.END
+
+		start = datetime.strptime(budget["start_date"], '%Y-%m-%d')
+		end = datetime.strptime(budget["end_date"], '%Y-%m-%d')
+		amount = float(budget["amount"])
+		days_total = (end - start).days + 1
+		today = datetime.now(IST).date()
+		days_passed = (today - start.date()).days + 1 if start.date() <= today <= end.date() else days_total
+
+		txns = supabase.table("Expenses") \
 			.select("amount,created_at,wallet,category") \
 			.eq("user_id", update.effective_user.id) \
 			.gte("created_at", start.isoformat()) \
@@ -543,7 +550,7 @@ async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE
 			.execute()
 		
 		txns = [
-			t for t in result.data
+			t for t in txns.data
 			if (budget["wallets"][0] == "__ALL__" or t["wallet"] in budget["wallets"])
 			and (budget["categories"][0] == "__ALL__" or t["category"] in budget["categories"])
 		]
@@ -574,11 +581,11 @@ async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE
 			else:
 				msg += "\n\n✅ *You're within budget.*"
 
-		await query.message.reply_text(msg, parse_mode="Markdown")
+		await update.message.reply_text(msg, parse_mode="Markdown")
 
 	except Exception as e:
 		print("Budget stats error:", e)
-		await query.message.reply_text("❌ Failed to compute budget statistics.")
+		await update.message.reply_text("❌ Failed to compute budget statistics.")
 
 	return ConversationHandler.END
 

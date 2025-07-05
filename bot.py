@@ -21,7 +21,7 @@ from config import (
     UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
 	DELETE_ID, DELETE_CONFIRM,
 	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT,
-	BUDGET_VIEW_CHOICE, BUDGET_SELECT
+	BUDGET_VIEW_CHOICE,
 )
 from entry_point import (
     start, income_command,
@@ -44,6 +44,7 @@ conv_handler = ConversationHandler(
 		MessageHandler(filters.Regex(r"(?i)update transaction (\d+)$") & ~filters.COMMAND, get_update_free_form),
 		MessageHandler(filters.Regex(r"^/delete_(\d+)$"), get_delete_id),
 		MessageHandler(filters.Regex(r"(?i)^delete transaction \d+$") & ~filters.COMMAND, get_delete_free_form),
+		MessageHandler(filters.Regex(r"^/vb_(\d+)$"), show_budget_details),
 	],
 	states={
 		CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
@@ -64,8 +65,6 @@ conv_handler = ConversationHandler(
 		BUDGET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_amount)],
 		BUDGET_DEFAULT: [CallbackQueryHandler(get_budget_default, pattern=r"^budget_default_")],
 		BUDGET_VIEW_CHOICE: [CallbackQueryHandler(get_budget_list, pattern=r"^budget_view_(active|all)$")],
-		BUDGET_SELECT: [CallbackQueryHandler(show_budget_details, pattern=r"^budget_select:\d+$")],
-
 	},
 	fallbacks=[CommandHandler("cancel", cancel)],
 	# per_message=True
@@ -73,6 +72,8 @@ conv_handler = ConversationHandler(
 
 app.add_handler(CommandHandler("start", start))
 # app.add_handler(CallbackQueryHandler(budget_callback_handler, pattern=r"^budget_"))
+# app.add_handler(CallbackQueryHandler(get_budget_list, pattern=r"^budget_view_(active|all)$"))
+# app.add_handler(CallbackQueryHandler(show_budget_details, pattern=r"^budget_select:\d+$"))
 app.add_handler(conv_handler)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_form_handler))
 

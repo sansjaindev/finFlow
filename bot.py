@@ -72,7 +72,6 @@ conv_handler = ConversationHandler(
 )
 
 app.add_handler(CommandHandler("start", start))
-# app.add_handler(CommandHandler("budget", budget_command))
 # app.add_handler(CallbackQueryHandler(budget_callback_handler, pattern=r"^budget_"))
 app.add_handler(conv_handler)
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, free_form_handler))

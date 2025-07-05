@@ -113,10 +113,17 @@ async def get_delete_free_form(update: Update, context: ContextTypes.DEFAULT_TYP
 		data = result.data
 
 		if not data:
-			await update.message.reply_text("❌ Transaction not found.")
+			await update.message.reply_text("❌ Transaction not found. Please check the ID")
 			return ConversationHandler.END
 
 		context.user_data["delete_data"] = data
+
+		keyboard = InlineKeyboardMarkup([
+			[
+				InlineKeyboardButton("✅ Yes", callback_data="delete_confirm"),
+				InlineKeyboardButton("❌ No", callback_data="delete_cancel")
+			]
+		])
 
 		await update.message.reply_text(
 			f"You are about to delete the following transaction:\n\n"
@@ -124,8 +131,9 @@ async def get_delete_free_form(update: Update, context: ContextTypes.DEFAULT_TYP
 			f"{'🟢 Income' if data['amount'] > 0 else '🔴 Expense'} ₹{abs(data['amount'])}\n"
 			f"📂 {data['category']} | 💳 {data['wallet']}\n"
 			f"🗓️ {data['created_at'][:10]} | 📝 {data.get('note', '')}\n\n"
-			f"Are you sure? Reply with 'yes' to confirm or 'no' to cancel.",
-			parse_mode=ParseMode.MARKDOWN
+			f"Are you sure?",
+			parse_mode=ParseMode.MARKDOWN,
+			reply_markup=keyboard
 		)
 		return DELETE_CONFIRM
 	

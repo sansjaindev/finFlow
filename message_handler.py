@@ -166,11 +166,11 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	action = query.data
 
 	if action == "update_cancel":
-		await query.message.reply_text("❌ Update cancelled.")
+		await query.message.edit_text("❌ Update cancelled.")
 		return ConversationHandler.END
 	
 	if action != "update_confirm":
-		await query.message.reply_text("❌ Invalid action.")
+		await query.message.edit_text("❌ Invalid action.")
 		return ConversationHandler.END
 	
 	
@@ -194,18 +194,18 @@ async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		}).eq("user_id", user_id).eq("id", int(txn_id)).execute()
 
 		if not update_result.data:
-			await update.message.reply_text("❌ Transaction not found or could not be updated.")
+			await update.message.edit_text("❌ Transaction not found or could not be updated.")
 			return ConversationHandler.END
 
 		display_date = created_at[:10]
-		await query.message.reply_text(
+		await query.message.edit_text(
 			f"✅ Transaction updated:\n*{category.title()}* ₹{abs(final_amount)} via *{wallet}*\n🗓️ {display_date} | 📝 {note}",
 			parse_mode=ParseMode.MARKDOWN
 		)
 
 	except Exception as e:
 		print("Update error:", e)
-		await query.message.reply_text("⚠️ Failed to update transaction.")
+		await query.message.edit_text("⚠️ Failed to update transaction.")
 
 	return ConversationHandler.END
 
@@ -257,11 +257,11 @@ async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	action = query.data
 
 	if action == "delete_cancel":
-		await query.message.reply_text("❌ Deletion cancelled.")
+		await query.message.edit_text("❌ Deletion cancelled.")
 		return ConversationHandler.END
 	
 	if action != "delete_confirm":
-		await query.message.reply_text("❌ Invalid action.")
+		await query.message.edit_text("❌ Invalid action.")
 		return ConversationHandler.END
 	
 	
@@ -272,13 +272,13 @@ async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		delete_result = supabase.table("Expenses").delete().eq("user_id", user_id).eq("id", txn_id).execute()
 
 		if not delete_result.data:
-			await query.message.reply_text("⚠️ Transaction not found or already deleted.")
+			await query.message.edit_text("⚠️ Transaction not found or already deleted.")
 		else:
-			await query.message.reply_text("✅ Transaction successfully deleted.")
+			await query.message.edit_text("✅ Transaction successfully deleted.")
 
 	except Exception as e:
 		print("Delete Error:", e)
-		await query.message.reply_text("⚠️ Failed to delete transaction.")
+		await query.message.edit_text("⚠️ Failed to delete transaction.")
 
 	return ConversationHandler.END
 

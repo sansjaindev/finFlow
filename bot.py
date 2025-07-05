@@ -13,7 +13,9 @@ from message_handler import (
 	get_delete_id, confirm_delete,
 	budget_callback_handler,
 	get_budget_start, get_budget_end, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default,
-	get_budget_list, show_budget_details, 
+	get_budget_list, show_budget_details,
+	get_budget_id,
+	delete_budget_command, confirm_delete_budget,
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
@@ -22,6 +24,7 @@ from config import (
 	DELETE_ID, DELETE_CONFIRM,
 	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT,
 	BUDGET_VIEW_CHOICE,
+	DELETE_BUDGET_ID, DELETE_BUDGET_CONFIRM
 )
 from entry_point import (
     start, income_command,
@@ -45,6 +48,7 @@ conv_handler = ConversationHandler(
 		MessageHandler(filters.Regex(r"^/delete_(\d+)$"), get_delete_id),
 		MessageHandler(filters.Regex(r"(?i)^delete transaction \d+$") & ~filters.COMMAND, get_delete_free_form),
 		MessageHandler(filters.Regex(r"^/vb_(\d+)$"), show_budget_details),
+		MessageHandler(filters.Regex(r"^/db_(\d+)$"), delete_budget_command),
 	],
 	states={
 		CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_category)],
@@ -65,6 +69,8 @@ conv_handler = ConversationHandler(
 		BUDGET_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_budget_amount)],
 		BUDGET_DEFAULT: [CallbackQueryHandler(get_budget_default, pattern=r"^budget_default_")],
 		BUDGET_VIEW_CHOICE: [CallbackQueryHandler(get_budget_list, pattern=r"^budget_view_(active|all)$")],
+		DELETE_BUDGET_ID: [CallbackQueryHandler(get_budget_id, pattern=r"^delete_budget:")],
+		DELETE_BUDGET_CONFIRM: [CallbackQueryHandler(confirm_delete_budget, pattern=r"^delete_budget_(confirm|cancel)")]
 	},
 	fallbacks=[CommandHandler("cancel", cancel)],
 	# per_message=True

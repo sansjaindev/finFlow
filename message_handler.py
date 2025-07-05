@@ -11,6 +11,7 @@ from config import (
 	BUDGET_START_DATE, BUDGET_END_DATE,
 	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT,
 	BUDGET_VIEW_CHOICE,
+	DELETE_BUDGET_ID, DELETE_BUDGET_CONFIRM
 )
 from parser import parse_expense
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -305,8 +306,28 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 		await query.message.reply_text("📅 Enter budget start date (YYYY-MM-DD).")
 		return BUDGET_START_DATE
 	
-	if query.data == "budger_remove":
-		print("removing budget")
+	if query.data == "budget_remove":
+		user_id = update.effective_user.id
+		result = supabase.table("Budgets").select("id,start_date,end_date,amount") \
+										.eq("user_id", user_id).execute()
+
+		budgets = result.data
+		if not budgets:
+			await query.message.reply_text("ℹ️ No budgets to delete.")
+			return ConversationHandler.END
+
+		buttons = [
+			[InlineKeyboardButton(f"{b['start_date']} → {b['end_date']} (₹{int(b['amount'])})", callback_data=f"delete_budget:{b['id']}")]
+			for b in budgets
+		]
+
+		await query.message.reply_text(
+			"🗑️ *Select a budget to delete:*",
+			reply_markup=InlineKeyboardMarkup(buttons),
+			parse_mode=ParseMode.MARKDOWN
+		)
+
+		return DELETE_BUDGET_ID
 
 	return ConversationHandler.END
 
@@ -504,7 +525,8 @@ async def get_budget_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		for b in budgets:
 			message += (
 				f"🗓️ {b['start_date']} → {b['end_date']} | ₹{int(b['amount'])}\n"
-				f"🔗 View Budget: /vb\_{b['id']}\n\n"
+				f"🔗 View Budget: /vb\_{b['id']}\n"
+				f"🗑️ Delete Budget /db\_{b['id']}\n\n"
 			)
 		
 		await query.message.reply_text(message.strip(), parse_mode="Markdown")
@@ -590,4 +612,86 @@ async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE
 	return ConversationHandler.END
 
 
+async def get_budget_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+	budget_id = query.data.split(":")[1]
+	context.user_data["delete_budget_id"] = budget_id
 
+	user_id = update.effective_user.id
+	result = supabase.table("Budgets").select("*").eq("user_id", user_id).eq("id", budget_id).single().execute()
+	budget = result.data
+
+	if not budget:
+		await query.message.reply_text("❌ Budget not found.")
+		return ConversationHandler.END
+
+	context.user_data["delete_budget_data"] = budget
+
+	confirm_markup = InlineKeyboardMarkup([
+		[InlineKeyboardButton("✅ Yes", callback_data="delete_budget_confirm"),
+		 InlineKeyboardButton("❌ No", callback_data="delete_budget_cancel")]
+	])
+
+	await query.message.reply_text(
+		f"Are you sure you want to delete this budget?\n\n"
+		f"🗓️ {budget['start_date']} → {budget['end_date']} | ₹{int(budget['amount'])}",
+		reply_markup=confirm_markup
+	)
+	return DELETE_BUDGET_CONFIRM
+
+async def confirm_delete_budget(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	query = update.callback_query
+	await query.answer()
+
+	if query.data == "delete_budget_cancel":
+		await query.message.edit_text("❌ Budget deletion cancelled.")
+		return ConversationHandler.END
+
+	if query.data != "delete_budget_confirm":
+		await query.message.edit_text("❌ Invalid action.")
+		return ConversationHandler.END
+
+	budget_id = context.user_data["delete_budget_id"]
+	user_id = update.effective_user.id
+
+	try:
+		delete_result = supabase.table("Budgets").delete().eq("user_id", user_id).eq("id", budget_id).execute()
+		
+		if not delete_result.data:
+			await query.message.edit_text("⚠️ Budget not found or already deleted.")
+		else:
+			await query.message.edit_text("✅ Budget successfully deleted.")
+
+	except Exception as e:
+		print("Error deleting budget:", e)
+		await query.message.edit_text("⚠️ Failed to delete budget. Please try again later.")
+
+	return ConversationHandler.END
+
+async def delete_budget_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	budget_id = update.message.text.strip().split("_")[1]
+	user_id = update.effective_user.id
+
+	result = supabase.table("Budgets").select("*").eq("user_id", user_id).eq("id", budget_id).single().execute()
+	budget = result.data
+
+	if not budget:
+		await update.message.reply_text("❌ Budget not found.")
+		return ConversationHandler.END
+
+	context.user_data["delete_budget_id"] = budget_id
+	context.user_data["delete_budget_data"] = budget
+
+	keyboard = InlineKeyboardMarkup([
+		[InlineKeyboardButton("✅ Yes", callback_data="delete_budget_confirm"),
+		 InlineKeyboardButton("❌ No", callback_data="delete_budget_cancel")]
+	])
+
+	await update.message.reply_text(
+		f"Are you sure you want to delete this budget?\n\n"
+		f"🗓️ {budget['start_date']} → {budget['end_date']} | ₹{int(budget['amount'])}",
+		reply_markup=keyboard
+	)
+
+	return DELETE_BUDGET_CONFIRM

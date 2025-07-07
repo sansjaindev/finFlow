@@ -90,10 +90,14 @@ async def handle(request):
 	await app.update_queue.put(update)
 	return web.Response(text="OK")
 
+async def health_check(request):
+    return web.Response(text="✅ Bot is alive")
+
 async def main():
 	await app.bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)
 	web_app = web.Application()
 	web_app.router.add_post(WEBHOOK_PATH, handle)
+	web_app.router.add_get("/health", health_check)
 	await app.initialize()
 	await app.start()
 	runner = web.AppRunner(web_app)

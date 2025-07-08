@@ -72,7 +72,7 @@ async def handle_insert(update, context, user_id, parsed):
 			else datetime.now(IST).isoformat()
 		)
 
-		final_amount = -abs(amount) if category.lower() not in ["income", "salary"] else abs(amount)
+		final_amount = -abs(amount) if category.lower() not in ["income", "salary", "bonus"] else abs(amount)
 		
 		supabase.table("Expenses").insert({
 			"user_id": user_id,

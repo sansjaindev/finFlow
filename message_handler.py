@@ -6,15 +6,17 @@ from config import (
 	supabase,
 	IST, 
 	AMOUNT, WALLET, NOTE, DATE,
-	UPDATE_DATA, UPDATE_CONFIRM,
-	DELETE_CONFIRM,
+	# UPDATE_DATA, UPDATE_CONFIRM,
+	UPDATE_DATA,
+	# DELETE_CONFIRM,
 	BUDGET_START_DATE, BUDGET_END_DATE,
 	BUDGET_CATEGORY, BUDGET_WALLET, BUDGET_AMOUNT, BUDGET_DEFAULT,
-	BUDGET_VIEW_CHOICE,
-	DELETE_BUDGET_ID, DELETE_BUDGET_CONFIRM
+	# BUDGET_VIEW_CHOICE,
+	# DELETE_BUDGET_ID, DELETE_BUDGET_CONFIRM
 )
 from parser import parse_expense
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram_bot_calendar import DetailedTelegramCalendar, LSTEP
 
 
 # --- Step 1: Category ---
@@ -157,7 +159,7 @@ async def get_update_data(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		reply_markup=keyboard
 	)
 
-	return UPDATE_CONFIRM
+	return ConversationHandler.END
 
 # --- Step 3: Confirm Update ---
 async def confirm_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -243,12 +245,12 @@ async def get_delete_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			parse_mode=ParseMode.MARKDOWN,
 			reply_markup=keyboard
 		)
-		return DELETE_CONFIRM
+		# return DELETE_CONFIRM
 	
 	except Exception as e:
 		print("Delete ID Fetch Error:", e)
 		await update.message.reply_text("⚠️ Failed to fetch transaction.")
-		return ConversationHandler.END
+		# return ConversationHandler.END
 
 # --- Step 2: Confirm Delete
 async def confirm_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -299,11 +301,21 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 			reply_markup=InlineKeyboardMarkup(keyboard)
 		)
 
-		return BUDGET_VIEW_CHOICE
+		# return BUDGET_VIEW_CHOICE
+		return
 
 
 	if query.data == "budget_add":
-		await query.message.reply_text("📅 Enter budget start date (YYYY-MM-DD).")
+		context.user_data["budget_start"] = None
+		context.user_data["budget_end"] = None
+		context.user_data["budget_wallets"] = []
+		context.user_data["budget_categories"] = []
+		context.user_data["budget_amount"] = None
+		context.user_data["budget_add_started"] = False  # Reset flag
+		cal, step = DetailedTelegramCalendar().build()
+		
+		await query.message.reply_text(f"📅 Select {LSTEP[step]} for *start date*:", reply_markup=cal, parse_mode="Markdown")
+		print(context.user_data)
 		return BUDGET_START_DATE
 	
 	if query.data == "budget_remove":
@@ -327,60 +339,82 @@ async def budget_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 			parse_mode=ParseMode.MARKDOWN
 		)
 
-		return DELETE_BUDGET_ID
+		# return DELETE_BUDGET_ID
+		return
 
 	return ConversationHandler.END
 
 # --- Step 1: Budget Start Date ---
 async def get_budget_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	try:
-		start_date = datetime.strptime(update.message.text.strip(), '%Y-%m-%d').isoformat()
-		context.user_data["budget_start"] = str(start_date)
-		await update.message.reply_text("📅 Enter budget end date (YYYY-MM-DD).")
+	if context.user_data.get("budget_add_started"):
 		return BUDGET_END_DATE
+	
+	query = update.callback_query
+	await query.answer()
 
-	except Exception as e:
-		await update.message.reply_text("❌ Invalid format. Use YYYY-MM-DD.")
+	result, key, step = DetailedTelegramCalendar().process(query.data)
+
+	if not result and key:
+		await query.message.edit_text(
+			f"📅 Select {LSTEP[step]} for *start date*:",
+			reply_markup=key,
+			parse_mode="Markdown"
+		)
 		return BUDGET_START_DATE
+
+	context.user_data["budget_start"] = result.isoformat()
+	context.user_data["budget_add_started"] = True
+
+	# Move to END date
+	cal, step = DetailedTelegramCalendar().build()
+	await query.message.edit_text(f"Selected Start Date : {result.isoformat()}")
+	await query.message.reply_text(f"📅 Select {LSTEP[step]} for *end date*:", reply_markup=cal, parse_mode="Markdown")
+	return BUDGET_END_DATE
 
 # --- Step 2: Budget End Date ---
 async def get_budget_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
-	try:
-		end_date = datetime.strptime(update.message.text.strip(), '%Y-%m-%d').isoformat()
-		start_date = context.user_data["budget_start"]
+	if not context.user_data.get("budget_add_started"):
+		return BUDGET_START_DATE
 
-		if end_date <= start_date:
-			await update.message.reply_text("⚠️ End date must be after start date. Try again:")
-			return BUDGET_END_DATE
+	query = update.callback_query
+	await query.answer()
+	result, key, step = DetailedTelegramCalendar().process(query.data)
+
+
+	if not result and key:
+		await query.message.edit_text(f"📅 Select {LSTEP[step]} for *end date*:", reply_markup=key, parse_mode="Markdown")
+		return BUDGET_END_DATE
 		
-		context.user_data["budget_end"] = str(end_date)
-		user_id = update.effective_user.id
-
-		try:
-			result = supabase.table("Expenses") \
+	context.user_data["budget_end"] = result.isoformat()
+	await query.message.edit_text(f"Selected End Date : {result.isoformat()}")
+	end_date = context.user_data["budget_end"]
+	start_date = context.user_data["budget_start"]
+	if end_date <= start_date:
+		await query.message.reply_text("⚠️ End date must be after start date. Try again:")
+		return BUDGET_END_DATE
+		
+	user_id = update.effective_user.id
+	try:
+		result = supabase.table("Expenses") \
 							.select("wallet") \
 							.eq("user_id", user_id) \
 							.execute()
 			
-			wallets = list({txn["wallet"] for txn in result.data if txn.get("wallet")})
-			wallets.sort()
+		wallets = list({txn["wallet"] for txn in result.data if txn.get("wallet")})
+		wallets.sort()
 
-			if not wallets:
-				wallets = ["UPI", "Cash", "Card"]
-			
-			buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in wallets]
-			buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])
-			await update.message.reply_text("💳 Select wallet(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
-			context.user_data["budget_wallets"] = []
-			return BUDGET_WALLET
+		if not wallets:
+			wallets = ["UPI", "Cash", "Card"]
 		
-		except Exception as e:
-			await update.message.reply_text("⚠️ Failed to fetch wallets. Try again.")
-			return ConversationHandler.END
-	
+		buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in wallets]
+		buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])
+		await query.message.reply_text("💳 Select wallet(s) to apply budget to:", reply_markup=InlineKeyboardMarkup(buttons))
+		context.user_data["budget_wallets"] = []
+		return BUDGET_WALLET
+		
 	except Exception as e:
-		await update.message.reply_text("❌ Invalid format. Use YYYY-MM-DD.")
-		return BUDGET_END_DATE
+		await query.message.reply_text("⚠️ Failed to fetch wallets. Try again.")
+		return ConversationHandler.END
 
 # --- Step 3: Buget Wallets ---
 async def get_budget_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -408,13 +442,10 @@ async def get_budget_wallet(update: Update, context: ContextTypes.DEFAULT_TYPE):
 			context.user_data["budget_categories"] = []
 			return BUDGET_CATEGORY
 
-
-
 		except Exception as e:
 			print("Error fetching categories:", e)
 			await query.message.reply_text("⚠️ Failed to fetch categories. Try again.")
 			return ConversationHandler.END
-
 
 	wallet = query.data.split(":")[1]
 	if wallet not in context.user_data["budget_wallets"]:
@@ -488,7 +519,7 @@ async def get_budget_default(update: Update, context: ContextTypes.DEFAULT_TYPE)
 	if not categories or set(categories) == set(all_categories):
 		categories = ["__ALL__"]
 
-	# Save to Supabase (replace with actual code)
+	# Save to Supabase
 	try:
 		response = supabase.table("Budgets").insert({
 			"user_id" : user_id,
@@ -632,26 +663,33 @@ async def get_budget_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	context.user_data["delete_budget_id"] = budget_id
 
 	user_id = update.effective_user.id
-	result = supabase.table("Budgets").select("*").eq("user_id", user_id).eq("id", budget_id).single().execute()
-	budget = result.data
 
-	if not budget:
-		await query.message.reply_text("❌ Budget not found.")
-		return ConversationHandler.END
+	try:
+		result = supabase.table("Budgets").select("*").eq("user_id", user_id).eq("id", budget_id).single().execute()
+		budget = result.data
 
-	context.user_data["delete_budget_data"] = budget
+		if not budget:
+			await query.message.reply_text("❌ Budget not found.")
+			return ConversationHandler.END
 
-	confirm_markup = InlineKeyboardMarkup([
-		[InlineKeyboardButton("✅ Yes", callback_data="delete_budget_confirm"),
-		 InlineKeyboardButton("❌ No", callback_data="delete_budget_cancel")]
-	])
+		context.user_data["delete_budget_data"] = budget
 
-	await query.message.reply_text(
-		f"Are you sure you want to delete this budget?\n\n"
-		f"🗓️ {budget['start_date']} → {budget['end_date']} | ₹{int(budget['amount'])}",
-		reply_markup=confirm_markup
-	)
-	return DELETE_BUDGET_CONFIRM
+		confirm_markup = InlineKeyboardMarkup([
+			[InlineKeyboardButton("✅ Yes", callback_data="delete_budget_confirm"),
+			InlineKeyboardButton("❌ No", callback_data="delete_budget_cancel")]
+		])
+
+		await query.message.reply_text(
+			f"Are you sure you want to delete this budget?\n\n"
+			f"🗓️ {budget['start_date']} → {budget['end_date']} | ₹{int(budget['amount'])}",
+			reply_markup=confirm_markup
+		)
+	
+	except Exception as e:
+		print("Budget delete error:", e)
+		await query.message.reply_text("❌ Failed to delete budget.")
+
+	# return DELETE_BUDGET_CONFIRM
 
 async def confirm_delete_budget(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	query = update.callback_query
@@ -707,4 +745,5 @@ async def delete_budget_command(update: Update, context: ContextTypes.DEFAULT_TY
 		reply_markup=keyboard
 	)
 
-	return DELETE_BUDGET_CONFIRM
+	# return DELETE_BUDGET_CONFIRM
+

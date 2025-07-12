@@ -25,7 +25,7 @@ async def send_daily_reminder(app):
 		print("Failed to send scheduled message:", e)
 
 async def reset_default_budgets(app):
-	CHAT_ID = int(os.getenv("CHAT_IT"))
+	CHAT_ID = int(os.getenv("CHAT_ID"))
 	try:
 		today = datetime.now(IST).date()
 

@@ -85,7 +85,7 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("budget", budget_command))
 app.add_handler(conv_handler)
 
-app.add_handlers
+
 
 app.add_handler(CallbackQueryHandler(confirm_update, pattern=r"^update_"))
 app.add_handler(CallbackQueryHandler(confirm_delete, pattern=r"^delete_confirm$|^delete_cancel$"))

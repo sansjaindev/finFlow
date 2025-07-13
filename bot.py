@@ -6,7 +6,7 @@ from telegram.ext import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 from aiohttp import web
-from operation import cancel, send_daily_reminder, reset_default_budgets
+from operation import cancel, send_daily_reminder, reset_default_budgets, navigate_transaction_pages
 from message_handler import (
     get_category, get_amount, get_note, get_date, get_wallet,
     get_update_id, get_update_data, confirm_update,
@@ -85,6 +85,9 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("budget", budget_command))
 app.add_handler(conv_handler)
 
+
+
+app.add_handler(CallbackQueryHandler(navigate_transaction_pages, pattern=r"^page_\d+$"))
 
 
 app.add_handler(CallbackQueryHandler(confirm_update, pattern=r"^update_"))

@@ -4,7 +4,7 @@ from config import supabase
 from parser import parse_expense, apply_multi_ilike
 from telegram.ext import ConversationHandler, ContextTypes
 from telegram.constants import ParseMode
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 import os
 import random
 from config import IST
@@ -32,7 +32,7 @@ async def reset_default_budgets(app):
 		response = supabase.table("Budgets") \
 							.select("*") \
 							.eq("is_default", True) \
-							.lt("end_date", today.isoformat()) \
+							.eq("end_date", (today - timedelta(days=1)).isoformat()) \
 							.execute()
 		
 		for budget in response.data:
@@ -58,6 +58,11 @@ async def reset_default_budgets(app):
 				chat_id=CHAT_ID,
 				text="Default budget rolled over for use."
 			)
+
+			supabase.table("Budgets") \
+					.update({"is_default" : False}) \
+					.eq("id", budget["id"]) \
+					.execute()
 
 	except Exception as e:
 		print("❌ Failed to roll over default budgets:", e)
@@ -228,57 +233,123 @@ async def handle_view(update, context, user_id, text):
 
 
 		# --- Execute query ---
-		data = query.order("created_at", desc=True).execute().data
+		data = query.order("created_at", desc=False).execute().data
 
 		if not data:
 			await update.message.reply_text("ℹ️ No transactions found.")
 			return
 
-		message = f"📊 *Transactions:*\n\n"
-		total_income = 0
-		total_expense = 0
-		for txn in data:
-			amt = txn["amount"]
-			if amt > 0:
-				sign = "🟢 Income"
-				total_income += amt
+		# message = f"📊 *Transactions:*\n\n"
+		# total_income = 0
+		# total_expense = 0
+		# for txn in data:
+		# 	amt = txn["amount"]
+		# 	if amt > 0:
+		# 		sign = "🟢 Income"
+		# 		total_income += amt
 
-			else:
-				sign = "🔴 Expense"
-				total_expense += abs(amt)
+		# 	else:
+		# 		sign = "🔴 Expense"
+		# 		total_expense += abs(amt)
 
-			message += (
-				f"🆔 ID {txn['id']}\n"
-				f"{sign} ₹{abs(amt)}\n"
-				f"📂 {txn['category']} | 💳 {txn['wallet']}\n"
-				f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n"
-				f"📝 Update : /update\_{txn['id']}\n"
-				f"❌ Delete  : /delete\_{txn['id']}\n\n"
-				# f"/update\_{txn['id']} | /delete\_{txn['id']}\n\n"
-			)
+		# 	message += (
+		# 		f"🆔 ID {txn['id']}\n"
+		# 		f"{sign} ₹{abs(amt)}\n"
+		# 		f"📂 {txn['category']} | 💳 {txn['wallet']}\n"
+		# 		f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n"
+		# 		f"📝 Update : /update\_{txn['id']}\n"
+		# 		f"❌ Delete  : /delete\_{txn['id']}\n\n"
+		# 		# f"/update\_{txn['id']} | /delete\_{txn['id']}\n\n"
+		# 	)
 		
-		net_total = total_income - total_expense
+		# net_total = total_income - total_expense
 
-		summary = ["📈 *Summary:*\n"]
+		# summary = ["📈 *Summary:*\n"]
 
-		if "transactions" in text or "transaction" in text or ("income" not in text and ("expense" not in text or "expenses" not in text)):
-			summary.append(f"🟢 Total Income   : ₹{total_income:.2f}")
-			summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
-			summary.append(f"🧾 Net: ₹{net_total:.2f}")
+		# if "transactions" in text or "transaction" in text or ("income" not in text and ("expense" not in text or "expenses" not in text)):
+		# 	summary.append(f"🟢 Total Income   : ₹{total_income:.2f}")
+		# 	summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
+		# 	summary.append(f"🧾 Net: ₹{net_total:.2f}")
 
-		elif "income" in text:
-			summary.append(f"🟢 Total Income : ₹{total_income:.2f}")
+		# elif "income" in text:
+		# 	summary.append(f"🟢 Total Income : ₹{total_income:.2f}")
 			
-		elif "expenses" in text:
-			summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
+		# elif "expenses" in text:
+		# 	summary.append(f"🔴 Total Expenses : ₹{total_expense:.2f}")
 
-		message += "\n" + "\n".join(summary)	
+		# message += "\n" + "\n".join(summary)	
 
-		await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+		# await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+
+		context.user_data["pagination_data"] = data
+		await paginate_data(update, context, page=1)
 
 	except Exception as e:
 		print("Free-form error:", e)
 		await update.message.reply_text("⚠️ Could not process request.")
+
+async def paginate_data(update, context, page=1):
+	data = context.user_data["pagination_data"]
+
+	total_txns = len(data)
+
+	for per_page in range(4, 2, -1):
+		if total_txns %  per_page == 0:
+			break
+	
+	from math import ceil
+	total_pages = ceil(total_txns / per_page)
+
+	start = (page - 1) * per_page
+	end = start + per_page
+	page_data = data[start:end]
+
+	message = f"📊 *Transactions:*\n\n"
+	total_income = 0
+	total_expense = 0
+	for txn in page_data:
+		amt = txn["amount"]
+		if amt > 0:
+			sign = "🟢 Income"
+			total_income += amt
+
+		else:
+			sign = "🔴 Expense"
+			total_expense += abs(amt)
+
+		message += (
+			f"🆔 ID {txn['id']}\n"
+			f"{sign} ₹{abs(amt)}\n"
+			f"📂 {txn['category']} | 💳 {txn['wallet']}\n"
+			f"🗓️ {txn.get('created_at', '')[:10]} | 📝 {txn.get('note', '')}\n"
+			f"📝 Update : /update\_{txn['id']}\n"
+			f"❌ Delete  : /delete\_{txn['id']}\n\n"
+			# f"/update\_{txn['id']} | /delete\_{txn['id']}\n\n"
+		)
+	
+	buttons = []
+	if page > 1:
+		buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"page_{page - 1}"))
+
+	if page < total_pages:
+		buttons.append(InlineKeyboardButton("➡️ Next", callback_data=f"page_{page + 1}"))
+
+	if update.message:
+		await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup([buttons]), parse_mode=ParseMode.MARKDOWN)
+	
+	elif update.callback_query:
+		await update.callback_query.message.edit_text(message, reply_markup=InlineKeyboardMarkup([buttons]), parse_mode=ParseMode.MARKDOWN)
+
+async def navigate_transaction_pages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+	try:
+		query = update.callback_query
+		await query.answer()
+		page = int(query.data.split("_")[1])
+		await paginate_data(update, context, page=page)
+		
+	except Exception as e:
+		print("Pagination error:", e)
+		await update.callback_query.message.reply_text("⚠️ Could not load page.")
 
 
 async def handle_reports(update, context, user_id, text):

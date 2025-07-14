@@ -10,6 +10,7 @@ import random
 from config import IST
 import pandas as pd
 from io import BytesIO
+from math import ceil
 
 async def send_daily_reminder(app):
 	CHAT_ID = int(os.getenv("CHAT_ID"))
@@ -281,15 +282,27 @@ async def handle_view(update, context, user_id, text):
 
 		# await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
 
-		context.user_data["pagination_data"] = data
-		await paginate_data(update, context, page=1)
+		# context.user_data.pop("pagination", None)
+		# context.user_data.pop("pagination_gen", None)
+
+		gen = context.user_data.get("pagination_data", {}).get("gen", 0) + 1
+		context.user_data["pagination_data"] = {
+			"data" : data,
+			"gen" : gen
+		}
+		await paginate_data(update, context, page=1, gen=gen)
 
 	except Exception as e:
 		print("Free-form error:", e)
 		await update.message.reply_text("⚠️ Could not process request.")
 
-async def paginate_data(update, context, page=1):
-	data = context.user_data["pagination_data"]
+async def paginate_data(update, context, page=1, gen=None):
+	paginated_data = context.user_data.get("pagination_data", {})
+	data = paginated_data["data"]
+	current_gen = paginated_data.get("gen")
+
+	if gen is None:
+		gen = current_gen
 
 	total_txns = len(data)
 
@@ -297,7 +310,6 @@ async def paginate_data(update, context, page=1):
 		if total_txns %  per_page == 0:
 			break
 	
-	from math import ceil
 	total_pages = ceil(total_txns / per_page)
 
 	start = (page - 1) * per_page
@@ -329,10 +341,10 @@ async def paginate_data(update, context, page=1):
 	
 	buttons = []
 	if page > 1:
-		buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"page_{page - 1}"))
+		buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data=f"page_gen{gen}_{page - 1}"))
 
 	if page < total_pages:
-		buttons.append(InlineKeyboardButton("➡️ Next", callback_data=f"page_{page + 1}"))
+		buttons.append(InlineKeyboardButton("➡️ Next", callback_data=f"page_gen{gen}_{page + 1}"))
 
 	if update.message:
 		await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup([buttons]), parse_mode=ParseMode.MARKDOWN)
@@ -344,8 +356,24 @@ async def navigate_transaction_pages(update: Update, context: ContextTypes.DEFAU
 	try:
 		query = update.callback_query
 		await query.answer()
-		page = int(query.data.split("_")[1])
-		await paginate_data(update, context, page=page)
+		data = query.data
+		match = re.match(r"^page_gen(\d+)_(\d+)$", data)
+
+		if not match:
+			await query.message.reply_text("⚠️ Invalid navigation request.")
+			return
+		
+		gen_clicked = int(match.group(1))
+		page = int(match.group(2))
+
+		current_gen = context.user_data.get("pagination_data", {}).get("gen", -1)
+
+		
+		if gen_clicked != current_gen:
+			await query.message.reply_text("⚠️ This message has expired. Please request the transactions again.")
+			return
+			
+		await paginate_data(update, context, page=page, gen=gen_clicked)
 		
 	except Exception as e:
 		print("Pagination error:", e)

@@ -87,7 +87,7 @@ app.add_handler(conv_handler)
 
 
 
-app.add_handler(CallbackQueryHandler(navigate_transaction_pages, pattern=r"^page_\d+$"))
+app.add_handler(CallbackQueryHandler(navigate_transaction_pages, pattern=r"^page_gen(\d+)_(\d+)$"))
 
 
 app.add_handler(CallbackQueryHandler(confirm_update, pattern=r"^update_"))

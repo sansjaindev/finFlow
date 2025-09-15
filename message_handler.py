@@ -404,7 +404,7 @@ async def get_budget_end(update: Update, context: ContextTypes.DEFAULT_TYPE):
 		wallets.sort()
 
 		if not wallets:
-			wallets = ["UPI", "Cash", "Card"]
+			wallets = ["BOB", "HDFC", "Cash", "Card"]
 		
 		buttons = [[InlineKeyboardButton(w, callback_data=f"budget_wallet:{w}")] for w in wallets]
 		buttons.append([InlineKeyboardButton("✅ Done", callback_data="budget_wallet_done")])

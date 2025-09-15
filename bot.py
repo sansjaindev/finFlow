@@ -8,8 +8,8 @@ import asyncio
 from aiohttp import web
 from operation import cancel, send_daily_reminder, reset_default_budgets, navigate_transaction_pages
 from message_handler import (
-    get_category, get_amount, get_note, get_date, get_wallet,
-    get_update_id, get_update_data, confirm_update,
+	get_category, get_amount, get_note, get_date, get_wallet,
+	get_update_id, get_update_data, confirm_update,
 	get_delete_id, confirm_delete,
 	budget_callback_handler,
 	get_budget_start, get_budget_end, get_budget_wallet, get_budget_category, get_budget_amount, get_budget_default,
@@ -19,17 +19,17 @@ from message_handler import (
 )
 from config import (
 	BOT_TOKEN, WEBHOOK_PATH, WEBHOOK_URL, PORT,
-    CATEGORY, AMOUNT, DATE, NOTE, WALLET,
-    # UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
-    UPDATE_DATA,
+	CATEGORY, AMOUNT, DATE, NOTE, WALLET,
+	# UPDATE_ID, UPDATE_DATA, UPDATE_CONFIRM,
+	UPDATE_DATA,
 	# DELETE_ID, DELETE_CONFIRM,
 	BUDGET_MENU, BUDGET_START_DATE, BUDGET_END_DATE, BUDGET_WALLET,  BUDGET_CATEGORY, BUDGET_AMOUNT, BUDGET_DEFAULT,
 	# BUDGET_VIEW_CHOICE,
 	# DELETE_BUDGET_ID, DELETE_BUDGET_CONFIRM
 )
 from entry_point import (
-    start, income_command,
-    expense_command,
+	start, income_command,
+	expense_command,
 	get_update_free_form, get_delete_free_form,
 	budget_command,
 	free_form_handler
@@ -121,7 +121,7 @@ async def handle(request):
 	return web.Response(text="OK")
 
 async def health_check(request):
-    return web.Response(text="✅ Bot is alive")
+	return web.Response(text="✅ Bot is alive")
 
 async def main():
 	await app.bot.set_webhook(WEBHOOK_URL + WEBHOOK_PATH)

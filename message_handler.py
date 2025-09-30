@@ -624,7 +624,7 @@ async def show_budget_details(update: Update, context: ContextTypes.DEFAULT_TYPE
 		spent = abs(sum(float(t["amount"]) for t in txns))
 		remaining = amount - spent
 		avg_daily = spent / days_passed if days_passed > 0 else 0
-		optimal_daily = amount / days_total if days_total > 0 else 0
+		optimal_daily = remaining / (days_total - days_passed) if (days_total > 0 and remaining > 0) else 0
 
 		msg = (
 			f"📊 *Budget Status for*\n"
